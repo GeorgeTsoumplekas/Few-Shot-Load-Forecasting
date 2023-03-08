@@ -1,0 +1,5 @@
+---
+ cross_threshold: 180.0
+ min_length: '7 days'
+ acceptable_length: '30 days'
+ outlier_threshold: 16000.0

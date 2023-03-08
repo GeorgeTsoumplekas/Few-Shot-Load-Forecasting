@@ -1,0 +1,6 @@
+---
+ rolling_window: 48
+ anomaly_threshold_ratio: 0.09
+ zero_threshold: 10.0
+ iqr_lower_ratio: 1.7
+ iqr_upper_ratio: 32.0

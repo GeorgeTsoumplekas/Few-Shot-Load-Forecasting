@@ -1,0 +1,22 @@
+---
+ data_split_constants: 
+    timestep: 15
+    week_num: 1
+    pred_days: 1
+    test_days: 30
+ n_trials: 20
+ ht_config:
+    k_folds: 5
+    batch_size: 1
+    seed: 42
+    learning_rate:
+      lower_bound: 1e-4
+      upper_bound: 1e-2
+      log: true
+    epochs:
+      lower_bound: 5
+      upper_bound: 20
+    lstm_hidden_units:
+      lower_bound: 8
+      upper_bound: 64
+      log: true

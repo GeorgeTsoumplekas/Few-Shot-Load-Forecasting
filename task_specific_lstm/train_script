@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Bash Strict Mode
+set -euo pipefail
+IFS=$'\n\t'
+
+for file in ./../data/mini_iONA_unnormalized_preprocessed/test/*
+do
+    python3 ./source/train.py --filename "$file" --config "./config.yaml"
+done

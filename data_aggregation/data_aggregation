@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Bash Strict Mode
+set -euo pipefail
+IFS=$'\n\t'
+
+python3 ./source/segments_metadata.py --data_dir "../data/iONA_train/"
+python3 ./source/segments_metadata.py --data_dir "../data/iONA_test/"
+
+python3 ./source/aggregate.py --config "./aggregate_config.yaml"
