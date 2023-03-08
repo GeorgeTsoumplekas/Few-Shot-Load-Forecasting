@@ -416,7 +416,7 @@ def main():
             test_filenames.append(filename)
 
     # Create results directory
-    results_dir_name = './results/'
+    results_dir_name = './task_invariant_lstm/results/'
     if not os.path.exists(results_dir_name):
         os.makedirs(results_dir_name)
 

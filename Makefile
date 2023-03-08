@@ -1,17 +1,32 @@
+# Usage:
+# env: create virtual environment
+# install: install depencencies
+# preprocess: preprocess individual raw time series
+# aggregate: aggregate idividual preprocessed time series
+# experiment_1: execute task invariant lstm
+# experiment_2: execute task specific lstm
+
+VENV_PATH='env/bin/activate'
+
+env:
+	python3 -m venv venv
+	source $(VENV_PATH)
+
 install: requirements.txt
 	pip install -r requirements.txt
 
-preprocess:
+preprocess: data_preprocessing/preprocess_config.yaml data_preprocessing/slice_config.yaml
+	./data_preprocessing/data_preprocessing
 
+aggregate: data_aggregation/aggregate_config.yaml
+	./data_aggregation/data_aggregation
 
-aggregate:
+experiment_1: task_invariant_lstm/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/*
+	./task_invariant_lstm/train_script
 
-
-experiment_1:
-
-
-experiment_2:
-
+experiment_2: task_specific_lstm/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/*
+	./task_specific_lstm/train_script
 
 .PHONY: clean
 clean:
+	find . | grep -E "(__pycache__|\.pyc|\.pyo$)" | xargs rm -rf

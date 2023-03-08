@@ -168,7 +168,7 @@ def main() -> None:
     dir_type = (data_dir.split('_'))[1][:-1]
 
     # Create output directory
-    metadata_dir_name = '../data/' + dir_type + '_segments_metadata/'
+    metadata_dir_name = './data/' + dir_type + '_segments_metadata/'
     if not os.path.exists(metadata_dir_name):
         os.makedirs(metadata_dir_name)
 

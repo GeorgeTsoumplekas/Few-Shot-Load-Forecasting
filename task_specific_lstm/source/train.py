@@ -252,14 +252,14 @@ def main():
     args = parser.parse_args()
 
     raw_series_filepath =  args.raw_series_filepath
-    timeseries_code = raw_series_filepath[-25:-4]
+    timeseries_code = raw_series_filepath[-7:-4]
 
     config_filepath = args.config_filepath
     with open(config_filepath, 'r', encoding='utf8') as stream:
         config = yaml.safe_load(stream)
 
     # Create results directory
-    results_dir_name = './results/' + timeseries_code + '/'
+    results_dir_name = './task_specific_lstm/results/' + timeseries_code + '/'
     if not os.path.exists(results_dir_name):
         os.makedirs(results_dir_name)
 

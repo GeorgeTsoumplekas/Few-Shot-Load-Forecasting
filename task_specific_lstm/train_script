@@ -4,7 +4,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-for file in ./../data/mini_iONA_unnormalized_preprocessed/test/*
+for file in ./data/iONA_test_aggregated/*
 do
-    python3 ./source/train.py --filename "$file" --config "./config.yaml"
+    python3 ./task_specific_lstm/source/train.py --filepath "$file" \
+                                                 --config "./task_specific_lstm/config.yaml"
 done

@@ -1,10 +1,10 @@
 ---
- source_train_dir: '../data/iONA_train/'
- source_test_dir: '../data/iONA_test/'
- dest_train_dir: '../data/iONA_train_aggregated/'
- dest_test_dir: '../data/iONA_test_aggregated/'
- train_metadata_dir: '../data/train_segments_metadata/'
- test_metadata_dir: '../data/test_segments_metadata/'
+ source_train_dir: './data/iONA_train/'
+ source_test_dir: './data/iONA_test/'
+ dest_train_dir: './data/iONA_train_aggregated/'
+ dest_test_dir: './data/iONA_test_aggregated/'
+ train_metadata_dir: './data/train_segments_metadata/'
+ test_metadata_dir: './data/test_segments_metadata/'
  train_min_length: 6
  train_max_length: 17
  test_min_length: 1

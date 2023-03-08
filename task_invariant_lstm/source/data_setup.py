@@ -35,7 +35,7 @@ class AcrossTasksDataset(Dataset):
         self.data = data
         self.batch_idx = batch_idx
         self.day_measurements = day_measurements
-        self.timeseries_codes = [filename[-25:-4] for filename in filenames]
+        self.timeseries_codes = [filename[-7:-4] for filename in filenames]
 
     def __getitem__(self, index):
         """Get the data of a specific task based on the given index.
