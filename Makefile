@@ -6,7 +6,7 @@
 # experiment_1: execute task invariant lstm
 # experiment_2: execute task specific lstm
 
-VENV_PATH='env/bin/activate'
+VENV_PATH='venv/bin/activate'
 
 env:
 	python3 -m venv venv
