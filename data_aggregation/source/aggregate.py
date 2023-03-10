@@ -123,7 +123,7 @@ def create_set(set_min_length: int,
 
         # Save aggregated time series
         agg_filename = dest_dir + str(i).zfill(3) + '.csv'
-        aggregated.to_csv(agg_filename, index=False)
+        aggregated.to_csv(agg_filename)
 
 
 def main() -> None:

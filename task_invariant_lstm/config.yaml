@@ -3,10 +3,10 @@
     day_measurements: 96
     week_num: 1
     pred_days: 1
-    test_days: 5
- n_trials: 20
+    test_days: 7
+ n_trials: 15
  ht_config:
-    k_folds: 3
+    k_folds: 5
     seed: 42
     task_batch_size: 1
     sample_batch_size: 1
