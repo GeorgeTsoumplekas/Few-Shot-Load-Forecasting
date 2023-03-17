@@ -49,6 +49,9 @@ def objective(trial, x_train, y_train, ht_config):
         'kfolds': ht_config['k_folds'],
         'batch_size': ht_config['batch_size'],
         'seed': ht_config['seed'],
+        'scheduler_factor': ht_config['scheduler_factor'],
+        'scheduler_patience': int(ht_config['scheduler_patience']),
+        'scheduler_threshold': float(ht_config['scheduler_threshold']),
         'learning_rate': trial.suggest_float('learning_rate',
                                              float(ht_config['learning_rate']['lower_bound']),
                                              float(ht_config['learning_rate']['upper_bound']),
@@ -72,6 +75,9 @@ def objective(trial, x_train, y_train, ht_config):
     batch_size = config['batch_size']
     lstm_hidden_units = config['lstm_hidden_units']
     learning_rate = config['learning_rate']
+    scheduler_factor = config['scheduler_factor']
+    scheduler_patience = config['scheduler_patience']
+    scheduler_threshold = config['scheduler_threshold']
 
     results = {}  # Contains the validation loss of each fold
 
@@ -85,7 +91,7 @@ def objective(trial, x_train, y_train, ht_config):
         x_val_fold = x_train[val_idx]
         y_val_fold = y_train[val_idx]
 
-        # Get the dataloaders, model, optimizer and loss function
+        # Get the dataloaders, model, optimizer, scheduler and loss function
         train_dataloader, val_dataloader = data_setup.build_dataset(x_train_fold,
                                                                     y_train_fold,
                                                                     x_val_fold,
@@ -93,11 +99,16 @@ def objective(trial, x_train, y_train, ht_config):
                                                                     batch_size)
         network = model_builder.build_network(1, y_train.shape[1], lstm_hidden_units, device)
         optimizer = engine.build_optimizer(network, learning_rate)
+        scheduler = engine.build_scheduler(optimizer,
+                                           scheduler_factor,
+                                           scheduler_patience,
+                                           scheduler_threshold)
         loss_fn = nn.MSELoss()
 
         # Training loop
         for _ in range(num_epochs):
-            _ = engine.train_epoch(network, train_dataloader, optimizer, loss_fn, device)
+            train_loss = engine.train_epoch(network, train_dataloader, optimizer, loss_fn, device)
+            scheduler.step(train_loss)
 
         # Model evaluation for the specific fold
         val_loss, _ = engine.evaluate(network, val_dataloader, loss_fn, device)
@@ -140,8 +151,11 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name
     batch_size = opt_config['batch_size']
     lstm_hidden_units = opt_config['lstm_hidden_units']
     learning_rate = opt_config['learning_rate']
+    scheduler_factor = opt_config['scheduler_factor']
+    scheduler_patience = opt_config['scheduler_patience']
+    scheduler_threshold = opt_config['scheduler_threshold']
 
-    # Get the dataloaders, model, optimizer and loss function
+    # Get the dataloaders, model, optimizer, scheduler and loss function
     train_dataloader, test_dataloader = data_setup.build_dataset(x_train,
                                                       y_train,
                                                       x_test,
@@ -149,6 +163,10 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name
                                                       batch_size)
     network = model_builder.build_network(1, y_train.shape[1], lstm_hidden_units, device)
     optimizer = engine.build_optimizer(network, learning_rate)
+    scheduler = engine.build_scheduler(optimizer,
+                                       scheduler_factor,
+                                       scheduler_patience,
+                                       scheduler_threshold)
     loss_fn = nn.MSELoss()
 
     # Train and test losses on each epoch
@@ -164,7 +182,8 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name
 
         test_loss, _ = engine.evaluate(network, test_dataloader, loss_fn, device)
         test_losses[epoch] = test_loss
-        # print(f"Epoch {epoch+1} finished")
+
+        scheduler.step(train_loss)
 
     # Prediction plots
     _, y_preds = engine.evaluate(network, test_dataloader, loss_fn, device)
@@ -229,6 +248,9 @@ def hyperparameter_tuning(n_trials, results_dir_name, x_train, y_train, ht_confi
     opt_config = {
         'batch_size': 1,
         'seed': 42,
+        'scheduler_factor': ht_config['scheduler_factor'],
+        'scheduler_patience': int(ht_config['scheduler_patience']),
+        'scheduler_threshold': float(ht_config['scheduler_threshold']),
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'epochs': best_trial['params_epochs'].values[0],
         'lstm_hidden_units': best_trial['params_lstm_hidden_units'].values[0]

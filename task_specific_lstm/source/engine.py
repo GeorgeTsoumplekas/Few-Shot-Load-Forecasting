@@ -23,6 +23,32 @@ def build_optimizer(network, learning_rate):
     return optimizer
 
 
+def build_scheduler(optimizer, factor, patience, threshold):
+    """Create a learning rate scheduler with the specified settings.
+
+    The scheduler reduces the learning rate whenever training reaches a plateau (train loss
+    in the learning curve becomes flat).
+
+    Args:
+        optimizer: A pytorch optimizer object on which we apply the scheduler.
+        factor: A float that determines the factor by which the learning rate will be reduced.
+        patience: An integer that defines the number of epochs with no improvement after which
+            learning rate will be reduced.
+        threshold: A float that determines the threshold for measuring the new optimum, 
+            to only focus on significant changes
+
+    Returns:
+        scheduler: A pytorch learning rate scheduler object with the desired settings.
+    """
+
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer,
+                                                           mode='min',
+                                                           factor=factor,
+                                                           patience=patience,
+                                                           threshold=threshold)
+    return scheduler
+
+
 def train_epoch(network, train_dataloader, optimizer, loss_fn, device):
     """The training loop of the model for a specific epoch.
 

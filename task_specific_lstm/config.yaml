@@ -9,9 +9,12 @@
     k_folds: 5
     batch_size: 1
     seed: 42
+    scheduler_factor: 0.1
+    scheduler_patience: 2
+    scheduler_threshold: 1e-2
     learning_rate:
-      lower_bound: 1e-4
-      upper_bound: 1e-2
+      lower_bound: 5e-4
+      upper_bound: 5e-2
       log: true
     epochs:
       lower_bound: 5
