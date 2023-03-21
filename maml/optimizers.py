@@ -117,3 +117,10 @@ def build_LSLR_optimizer(device,
 
 def build_meta_optimizer(params, learning_rate):
     optimizer = torch.optim.Adam(params=params, lr=learning_rate)
+    return optimizer
+
+def build_meta_scheduler(meta_optimizer, T_max, eta_min):
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=meta_optimizer,
+                                                           T_max=T_max,
+                                                           eta_min=eta_min)
+    return scheduler

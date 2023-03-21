@@ -129,10 +129,10 @@ class MetaLSTMLayer(nn.Module):
         return output
         
 
-class MetaLearner(nn.Module):
+class BaseLearner(nn.Module):
 
     def __init__(self, input_shape, output_shape, hidden_units, device, meta_classifier=True):
-        super(MetaLearner, self).__init__()
+        super(BaseLearner, self).__init__()
 
         self.hidden_units = hidden_units
         self.input_shape = input_shape
@@ -179,5 +179,5 @@ class MetaLearner(nn.Module):
 
 
 def build_network(input_shape, output_shape, hidden_units, device, meta_classifier):
-    network = MetaLearner(input_shape, output_shape, hidden_units, device, meta_classifier)
+    network = BaseLearner(input_shape, output_shape, hidden_units, device, meta_classifier)
     return network

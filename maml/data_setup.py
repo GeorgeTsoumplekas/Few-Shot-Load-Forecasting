@@ -200,7 +200,7 @@ def get_tasks_dataset(data_filenames, pred_days, test_days, week_num, day_measur
     return tasks_dataset
 
 
-def build_tasks_set(data_filenames, data_config, task_batch_size, train_task):
+def build_tasks_set(data_filenames, data_config, task_batch_size):
     """Create a dataloader that handles the dataset of the given tasks.
 
     Args:
@@ -208,8 +208,6 @@ def build_tasks_set(data_filenames, data_config, task_batch_size, train_task):
         data_config: A dictionary that contains various user-configured values (i.e. train/test
             set sizes and subsequences' length).
         task_batch_size: An integer that represents the number of tasks in each tasks batch.
-        train_task: A boolean flag that defines whether the created dataloader refers to a
-            dataset of tasks used for training or not.
     Returns:
         A torch dataloader object that contains the given tasks.
     """
@@ -218,13 +216,7 @@ def build_tasks_set(data_filenames, data_config, task_batch_size, train_task):
     day_measurements = data_config['day_measurements']
     week_num = data_config['week_num']
     pred_days = data_config['pred_days']
-    test_days = None
-
-    # Training tasks do not have a test set
-    if train_task is True:
-        test_days = 0
-    else:
-        test_days = data_config['test_days']
+    test_days = data_config['test_days']
 
     tasks_dataset = get_tasks_dataset(data_filenames,
                                       pred_days,
@@ -239,54 +231,25 @@ def build_tasks_set(data_filenames, data_config, task_batch_size, train_task):
     return tasks_dataloader
 
 
-def build_train_task(train_task_data, sample_batch_size, data_config):
-    """Create the dataloader that handles a specific task used for training.
-
-    The time series that corresponds to the task is initially split to input/output subsequences
-    and then the corresponding dataset and dataloader objects are created.
-
-    Args:
-        train_task_data: A torch.Tensor that corresponds to the time series of the task.
-        sample_batch_size: An integer that is the number of subsequences in each batch.
-        data_config: A dictionary that contains various user-configured values.
-    Returns:
-        A dataloader that handles the samples of the training task.
-    """
-
-    train_task_data = train_task_data.squeeze()
-
-    # Only training subsequences used in training tasks
-    x_task_train, y_task_train = split_train_task(train_task_data, data_config)
-
-    train_dataset = TaskSpecificDataset(x_task_train, y_task_train)
-    train_dataloader = DataLoader(dataset=train_dataset,
-                                  batch_size=sample_batch_size,
-                                  num_workers=os.cpu_count(),  # Use all cpus available
-                                  shuffle=False)  # Sequential data, so no shuffling
-
-    return train_dataloader
-
-
-def build_test_task(test_task_data, sample_batch_size, data_config):
-    """Create the dataloader that handles a specific task used for testing.
+def build_task(task_data, sample_batch_size, data_config):
+    """Create the dataloader that handles a specific task.
 
     The time series that corresponds to the task is initially split to input/output subsequences
     (both for the training and test sets) and then the corresponding dataset and dataloader
     objects are created.
 
     Args:
-        test_task_data: A torch.Tensor that corresponds to the time series of the task.
+        task_data: A torch.Tensor that corresponds to the time series of the task.
         sample_batch_size: An integer that is the number of subsequences in each batch.
         data_config: A dictionary that contains various user-configured values.
     Returns:
         Two torch DataLoader objects, one for the training and one for the test set of the task.
     """
 
-    test_task_data = test_task_data.squeeze()
+    task_data = task_data.squeeze()
 
     # Both training and test subsequences are created in test tasks.
-    x_task_train, y_task_train, x_task_test, y_task_test = split_test_task(test_task_data,
-                                                                           data_config)
+    x_task_train, y_task_train, x_task_test, y_task_test = split_task(task_data, data_config)
 
     train_dataset = TaskSpecificDataset(x_task_train, y_task_train)
     test_dataset = TaskSpecificDataset(x_task_test, y_task_test)
@@ -303,59 +266,7 @@ def build_test_task(test_task_data, sample_batch_size, data_config):
     return train_dataloader, test_dataloader
 
 
-def split_train_task(task_data, data_config):
-    """Ingest the raw time series and create the desired training set.
-
-    First, both input and output length are definedand based on that the number of training
-    subsequences is calculated. Then the whole time series is split into non-overlapping
-    subsequences. Finally, the subsequences are normalized and transformed into torch tensors.
-    Note that there is no test set in a training task so all time series is used for training.
-
-    Args:
-        task_data: A torch.Tensor that corresponds to the time series of the task.
-        data_config: A dictionary that contains various user-configured values.
-    Returns:
-        A tuple that contains the input and output subsequences of the training set as
-        torch Tensors.
-    """
-
-    day_measurements = data_config['day_measurements']
-    week_num = data_config['week_num']
-    pred_days = data_config['pred_days']
-
-    # Number of days in each input subsequence
-    x_seq_days = week_num*7
-
-    # Number of measurements in each input subsequence
-    x_seq_measurements = day_measurements*x_seq_days
-
-    # Number of measurements in each output subsequence
-    y_seq_measurements = day_measurements*pred_days
-
-    x_task_train = torch.empty((0, x_seq_measurements))
-    y_task_train = torch.empty((0, y_seq_measurements))
-
-    total_days = len(task_data)//day_measurements
-
-    # Number of training set subsequences
-    x_train_seqs = (total_days - pred_days) // x_seq_days
-
-    # Normalize training set
-    task_data_mean = torch.mean(task_data)
-    task_data_std = torch.std(task_data)
-    task_data = (task_data - task_data_mean) / task_data_std
-
-    for i in range(x_train_seqs):
-        x_slice = task_data[i*x_seq_measurements:(i+1)*x_seq_measurements]
-        y_slice = task_data[(i+1)*x_seq_measurements:(i+1)*x_seq_measurements+y_seq_measurements]
-
-        x_task_train = torch.vstack((x_task_train, x_slice))
-        y_task_train = torch.vstack((y_task_train, y_slice))
-
-    return x_task_train, y_task_train
-
-
-def split_test_task(task_data, data_config):
+def split_task(task_data, data_config):
     """Ingest the raw time series and create the desired train and test sets.
 
     First, both input and output length are defined, as well as the size of the test set.
