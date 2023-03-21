@@ -29,7 +29,7 @@ class GradientDescentLearningRule(nn.Module):
         self.learning_rate = torch.ones(1) * learning_rate
         self.learning_rate.to(device)
 
-    def update_params(self, names_weights_dict, names_grads_wrt_params_dict, num_step, tau=0.9):
+    def update_params(self, names_weights_dict, names_grads_wrt_params_dict):
         """Applies a single gradient descent update to all parameters.
         All parameter updates are performed using in-place operations and so
         nothing is returned.
@@ -79,18 +79,12 @@ class LSLRGradientDescentLearningRule(nn.Module):
 
     def initialise(self, names_weights_dict):
         self.names_learning_rates_dict = nn.ParameterDict()
-        for idx, (key, param) in enumerate(names_weights_dict.items()):
+        for key, _ in names_weights_dict.items():
             self.names_learning_rates_dict[key.replace(".", "-")] = nn.Parameter(
                 data=torch.ones(self.total_num_inner_loop_steps + 1) * self.init_learning_rate,
                 requires_grad=self.use_learnable_learning_rates)
 
-    def reset(self):
-
-        # for key, param in self.names_learning_rates_dict.items():
-        #     param.fill_(self.init_learning_rate)
-        pass
-
-    def update_params(self, names_weights_dict, names_grads_wrt_params_dict, num_step, tau=0.1):
+    def update_params(self, names_weights_dict, names_grads_wrt_params_dict, num_step):
         """Applies a single gradient descent update to all parameters.
         All parameter updates are performed using in-place operations and so
         nothing is returned.
@@ -105,3 +99,21 @@ class LSLRGradientDescentLearningRule(nn.Module):
             * names_grads_wrt_params_dict[key]
             for key in names_grads_wrt_params_dict.keys()
         }
+
+def build_GD_optimizer(device, learning_rate):
+    optimizer = GradientDescentLearningRule(device, learning_rate)
+    return optimizer
+
+def build_LSLR_optimizer(device,
+                         total_num_inner_loop_steps,
+                         use_learnable_learning_rates,
+                         init_learning_rate):
+
+    optimizer = LSLRGradientDescentLearningRule(device,
+                                                total_num_inner_loop_steps,
+                                                use_learnable_learning_rates,
+                                                init_learning_rate)
+    return optimizer
+
+def build_meta_optimizer(params, learning_rate):
+    optimizer = torch.optim.Adam(params=params, lr=learning_rate)
