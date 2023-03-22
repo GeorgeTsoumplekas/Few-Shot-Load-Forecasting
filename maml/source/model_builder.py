@@ -41,6 +41,7 @@ def extract_lstm_state_dict(current_dict):
 
 
 class MetaLinearLayer(nn.Module):
+
     def __init__(self, input_shape, output_shape):
         """
         A MetaLinear layer. Applies the same functionality of a standard linearlayer with the added functionality of
@@ -61,6 +62,7 @@ class MetaLinearLayer(nn.Module):
     
         self.bias = nn.Parameter(torch.zeros(output_shape))
 
+
     def forward(self, x, params=None):
         """
         Forward propagates by applying a linear function (Wx + b). If params are none then internal params are used.
@@ -72,7 +74,10 @@ class MetaLinearLayer(nn.Module):
         """
         if params is not None:
             params = extract_linear_dict(current_dict=params)
-            (weight, bias) = params["weights"], params["bias"]
+            params = params["linear"]
+            weight, bias = params["weights"], params["bias"]
+            weight = torch.squeeze(weight)
+            bias = torch.squeeze(bias)
         else:
             weight, bias = self.weights, self.bias
 
@@ -82,6 +87,7 @@ class MetaLinearLayer(nn.Module):
 class MetaLSTMLayer(nn.Module):
 
     def __init__(self, hidden_units, input_shape, device):
+        super(MetaLSTMLayer, self).__init__()
         self.hidden_units = hidden_units
         self.input_shape = input_shape
 

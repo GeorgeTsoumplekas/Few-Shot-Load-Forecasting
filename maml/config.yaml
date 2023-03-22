@@ -1,0 +1,22 @@
+---
+ opt_config:
+    train_epochs: 10
+    task_batch_size: 1
+    sample_batch_size: 1
+    lstm_hidden_units: 32
+    init_learning_rate: 1e-3
+    meta_learning_rate: 1e-3
+    T_max: 3
+    eta_min: 1e-5
+    num_inner_steps: 3
+    seed: 42
+    multi_step_loss_num_epochs: 3
+    second_order: True
+    second_to_first_order_epoch: 6
+ data_config:
+    day_measurements: 96
+    week_num: 1
+    pred_days: 1
+    test_days: 7
+
+   # TODO: change appropriately

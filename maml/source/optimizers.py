@@ -29,6 +29,7 @@ class GradientDescentLearningRule(nn.Module):
         self.learning_rate = torch.ones(1) * learning_rate
         self.learning_rate.to(device)
 
+
     def update_params(self, names_weights_dict, names_grads_wrt_params_dict):
         """Applies a single gradient descent update to all parameters.
         All parameter updates are performed using in-place operations and so
@@ -43,7 +44,6 @@ class GradientDescentLearningRule(nn.Module):
             - self.learning_rate * names_grads_wrt_params_dict[key]
             for key in names_weights_dict.keys()
         }
-
 
 
 class LSLRGradientDescentLearningRule(nn.Module):
