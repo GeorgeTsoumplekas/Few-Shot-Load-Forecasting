@@ -60,7 +60,13 @@ class LSLRGradientDescentLearningRule(nn.Module):
     will correspond to a stochastic gradient descent learning rule.
     """
 
-    def __init__(self, device, total_num_inner_loop_steps, use_learnable_learning_rates, init_learning_rate=1e-3):
+    def __init__(
+                 self,
+                 device,
+                 total_num_inner_loop_steps,
+                 use_learnable_learning_rates,
+                 init_learning_rate=1e-3,
+                 ):
         """Creates a new learning rule object.
         Args:
             init_learning_rate: A postive scalar to scale gradient updates to the
@@ -77,12 +83,14 @@ class LSLRGradientDescentLearningRule(nn.Module):
         self.total_num_inner_loop_steps = total_num_inner_loop_steps
         self.use_learnable_learning_rates = use_learnable_learning_rates
 
+
     def initialise(self, names_weights_dict):
         self.names_learning_rates_dict = nn.ParameterDict()
         for key, _ in names_weights_dict.items():
             self.names_learning_rates_dict[key.replace(".", "-")] = nn.Parameter(
                 data=torch.ones(self.total_num_inner_loop_steps + 1) * self.init_learning_rate,
                 requires_grad=self.use_learnable_learning_rates)
+
 
     def update_params(self, names_weights_dict, names_grads_wrt_params_dict, num_step):
         """Applies a single gradient descent update to all parameters.
@@ -100,9 +108,11 @@ class LSLRGradientDescentLearningRule(nn.Module):
             for key in names_grads_wrt_params_dict.keys()
         }
 
+
 def build_GD_optimizer(device, learning_rate):
     optimizer = GradientDescentLearningRule(device, learning_rate)
     return optimizer
+
 
 def build_LSLR_optimizer(device,
                          total_num_inner_loop_steps,
@@ -115,9 +125,13 @@ def build_LSLR_optimizer(device,
                                                 init_learning_rate)
     return optimizer
 
+
 def build_meta_optimizer(params, learning_rate):
-    optimizer = torch.optim.Adam(params=params, lr=learning_rate)
+    optimizer = torch.optim.Adam(params=params,
+                                 lr=learning_rate,
+                                 amsgrad=False)
     return optimizer
+
 
 def build_meta_scheduler(meta_optimizer, T_max, eta_min):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=meta_optimizer,
