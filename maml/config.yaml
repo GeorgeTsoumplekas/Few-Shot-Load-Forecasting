@@ -1,6 +1,6 @@
 ---
  opt_config:
-    train_epochs: 10
+    train_epochs: 3
     task_batch_size: 1
     sample_batch_size: 1
     lstm_hidden_units: 32
@@ -12,7 +12,7 @@
     seed: 42
     multi_step_loss_num_epochs: 3
     second_order: True
-    second_to_first_order_epoch: 6
+    second_to_first_order_epoch: 2
  data_config:
     day_measurements: 96
     week_num: 1

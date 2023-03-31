@@ -4,7 +4,7 @@ import argparse
 import os
 import yaml
 
-import maml.source.engine as engine
+import engine
 
 
 # TODO: change appropriately
