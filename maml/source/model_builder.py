@@ -182,15 +182,11 @@ class MetaLSTMLayer2(nn.Module):
                     self.bias_hh_l0]
 
 
-    def forward(self, x_sample, params=None):
+    def forward(self, x_sample, params=None, is_query_set=False):
         if params is not None:
             weights = self._get_flat_weights(params)
         else:
             weights = self._get_flat_weights()
-
-        # for weight in weights:
-        #     print(weight.shape)
-        # print()
 
         # Add an extra dimension so that the input is in a batch format.
         network_input = x_sample.view(x_sample.shape[0], x_sample.shape[1], self.input_shape)
@@ -205,6 +201,9 @@ class MetaLSTMLayer2(nn.Module):
         else:
             # During inference, we want to reset the model's hidden and cell states, since the
             # samples to be inferred are not necessarily fed sequentially to the model.
+            self.reset_states()
+
+        if is_query_set:
             self.reset_states()
 
         hx = (self.h_n, self.c_n)
@@ -251,17 +250,17 @@ class BaseLearner(nn.Module):
                                                       1
                                                       )
 
-        self.layer_dict['linear_2'] = MetaLinearLayer(self.output_shape,
-                                                      self.output_shape,
-                                                      2
-                                                      )
+        # self.layer_dict['linear_2'] = MetaLinearLayer(self.output_shape,
+        #                                               self.output_shape,
+        #                                               2
+        #                                               )
 
 
-    def forward(self, x_sample, params=None):
+    def forward(self, x_sample, params=None, is_query_set=False):
 
-        output = self.layer_dict['lstm'](x_sample, params)
+        output = self.layer_dict['lstm'](x_sample, params, is_query_set)
         output = self.layer_dict['linear_1'](output, params)
-        output = self.layer_dict['linear_2'](output, params)
+        # output = self.layer_dict['linear_2'](output, params)
         return output[-1].unsqueeze(dim=0)
 
 
@@ -273,7 +272,6 @@ class BaseLearner(nn.Module):
                     and param.grad is not None
                     and torch.sum(param.grad) > 0
                 ):
-                    print(param.grad)
                     param.grad.zero_()
         else:
             for name, param in params.items():
@@ -282,7 +280,6 @@ class BaseLearner(nn.Module):
                     and param.grad is not None
                     and torch.sum(param.grad) > 0
                 ):
-                    print(param.grad)
                     param.grad.zero_()
                     params[name].grad = None
 

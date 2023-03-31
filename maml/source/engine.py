@@ -49,15 +49,15 @@ class MetaLearner(nn.Module):
                                                    hidden_units=self.lstm_hidden_units,
                                                    device=self.device,
                                                    meta_classifier=True)
-        
+
         self.inner_loop_optimizer = optimizers.build_LSLR_optimizer(self.device,
                                                                self.num_inner_steps,
                                                                True,
                                                                self.init_learning_rate)
-        
+
         # Keeps the true weights of the base model (not the copied ones used during the inner
         # loop optimization)
-        self.names_weights = self.get_inner_loop_params_copy(state_dict=self.network.state_dict())
+        self.names_weights = self.get_inner_loop_params(state_dict=self.network.state_dict())
         self.inner_loop_optimizer.initialise(self.names_weights)
 
         print(f"Names weights: {self.names_weights}")
@@ -77,13 +77,6 @@ class MetaLearner(nn.Module):
             T_max=self.T_max,
             eta_min=self.eta_min
             )
-        
-        print(f"Names weights after trainable: {self.names_weights}")
-
-        flat_weights = self.network.layer_dict['lstm']._get_flat_weights(self.names_weights)
-        print(f"LSTM flat weights: {flat_weights}")
-        for param in flat_weights:
-            print(param)
 
 
     def get_per_step_loss_importance(self, epoch):
@@ -106,44 +99,21 @@ class MetaLearner(nn.Module):
         loss_weights = torch.Tensor(loss_weights).to(device=self.device)
         return loss_weights
 
-    # TODO: Change to represent the copied inner loop params as needed
-    # def get_inner_loop_params(self, params):
-    #     inner_loop_params = {
-    #         name: param.to(device=self.device)
-    #         for name, param in params 
-    #         if param.requires_grad
-    #         }
-    #     return inner_loop_params
-    
 
-    # def get_inner_loop_params(self, params):
-    #     inner_loop_params = {}
-
-    #     for name, param in params:
-    #         if param.requires_grad:
-    #             name_parts = name.split(".")
-    #             if name_parts[-2] == 'lstm':
-    #                 inner_loop_params[".".join(name_parts[2:])] = nn.Parameter(param).to(
-    #                     device=self.device)
-    #             else:
-    #                 inner_loop_params[".".join(name_parts[1:])] = param.to(device=self.device)
-
-    #     return inner_loop_params
-
-    def get_inner_loop_params_copy(self, state_dict):
-        names_weights_copy = {}
+    def get_inner_loop_params(self, state_dict):
+        names_weights = {}
 
         for name, param in state_dict.items():
-            names_weights_copy[name] = nn.Parameter(param)
+            names_weights[name] = nn.Parameter(param)
 
-        return names_weights_copy
-    
+        return names_weights
+
 
     def trainable_parameters(self):
         """
         Returns an iterator over the trainable parameters of the model.
         """
-        
+
         params = {}
 
         for name, param in self.names_weights.items():
@@ -162,13 +132,17 @@ class MetaLearner(nn.Module):
                 yield param
 
 
-    def inner_loop_forward(self, dataloader, weights):
+    def inner_loop_forward(self, dataloader, weights, is_query_set):
+
+        self.network.train()
         train_step_loss = 0.0
+
         for x_sample, y_sample in dataloader:
             x_sample, y_sample = x_sample.to(self.device), y_sample.to(self.device)
 
             y_pred = self.network.forward(x_sample=x_sample,
-                                          params=weights)
+                                          params=weights,
+                                          is_query_set=is_query_set)
             loss = F.mse_loss(y_pred, y_sample)
             train_step_loss += loss
 
@@ -201,7 +175,7 @@ class MetaLearner(nn.Module):
 
         grads = torch.autograd.grad(inner_epoch_loss,
                                     names_weights_copy.values(),
-                                    create_graph=use_second_order,
+                                    create_graph=False,  # this causes the crash - change to use_second_order when having the available resources
                                     allow_unused=True)
 
         names_grads_copy = dict(zip(names_weights_copy.keys(), grads))
@@ -290,9 +264,6 @@ class MetaLearner(nn.Module):
 
             self.train()
 
-            # Base model zero grad
-            self.network.zero_grad(params=self.names_weights)
-
             # Get per step importance vector
             per_step_loss_importance = self.get_per_step_loss_importance(epoch)
             print(f"Per step loss importances: {per_step_loss_importance}")
@@ -307,10 +278,10 @@ class MetaLearner(nn.Module):
                     data_config=self.data_config
                     )
                 
-                task_losses = []
+                task_query_losses = []
 
                 # Get a copy of the inner loop parameters 
-                names_weights_copy = self.get_inner_loop_params_copy(self.names_weights)
+                names_weights_copy = self.get_inner_loop_params(self.names_weights)
                 
                 # print(f"Names weights copy : {names_weights_copy}")
 
@@ -324,13 +295,14 @@ class MetaLearner(nn.Module):
                 # Inner loop steps
                 for inner_epoch in range(self.num_inner_steps):
                     print(f"Inner epoch {inner_epoch+1} / {self.num_inner_steps}")
+
                     # Net forward on support set
-                    # print("Support set!")
                     inner_epoch_support_loss = self.inner_loop_forward(
                         dataloader=train_dataloader,
-                        weights=names_weights_copy
+                        weights=names_weights_copy,
+                        is_query_set=False
                         )
-                    
+
                     print(f"Support set loss: {inner_epoch_support_loss}")
 
                     # print(f"Names weights copy shape before update:")
@@ -356,21 +328,24 @@ class MetaLearner(nn.Module):
                     # Net forward on query set
                     inner_epoch_query_loss = self.inner_loop_forward(
                         dataloader=test_dataloader,
-                        weights=names_weights_copy
+                        weights=names_weights_copy,
+                        is_query_set=True
                     )
 
                     print(f"Query set loss: {inner_epoch_query_loss}")
 
-                    task_losses.append(
+                    task_query_losses.append(
                         per_step_loss_importance[inner_epoch] * inner_epoch_query_loss
                         )
 
                 # Accumulate losses from all training tasks on their query sets
-                task_losses = torch.sum(torch.stack(task_losses))
-                print(f"Task losses: {task_losses}")
-                total_losses.append(task_losses)
+                task_query_losses = torch.sum(torch.stack(task_query_losses))
+                print(f"Task query set losses: {task_query_losses}")
+                total_losses.append(task_query_losses)
 
             print(f"Total losses: {total_losses}")
+
+            # Losses is the double sum (eq.4 page 5 in How to train Your MAML)
             losses = self.get_across_task_loss_metrics(total_losses=total_losses)
 
             for i, item in enumerate(per_step_loss_importance):
@@ -380,15 +355,11 @@ class MetaLearner(nn.Module):
             self.meta_update(loss=losses['loss'])
 
             # Get new lr from scheduler
-            losses['meta_learning_rate'] = self.scheduler.get_lr()[0]
+            losses['meta_learning_rate'] = self.meta_scheduler.get_lr()[0]
 
             print(f"Losses: {losses}")
 
             self.meta_scheduler.step()
-        
-            # Zero grads
-            self.optimizer.zero_grad()
-            self.zero_grad()
 
             for key, value in zip(list(losses.keys()), list(losses.values())):
                 if key not in epoch_losses:
