@@ -8,11 +8,11 @@
     meta_learning_rate: 1e-3
     T_max: 3
     eta_min: 1e-5
-    num_inner_steps: 2
+    num_inner_steps: 3
     seed: 42
-    multi_step_loss_num_epochs: 2
+    multi_step_loss_num_epochs: 3
     second_order: True
-    second_to_first_order_epoch: 1
+    second_to_first_order_epoch: 2
  data_config:
     day_measurements: 96
     week_num: 1

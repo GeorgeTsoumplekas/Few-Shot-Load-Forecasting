@@ -61,12 +61,11 @@ class MetaLearner(nn.Module):
         self.inner_loop_optimizer.initialise(self.names_weights)
 
         print(f"Names weights: {self.names_weights}")
+        self.to(self.device)
 
         print("Inner Loop optimizer parameters:")
         for key, value in self.inner_loop_optimizer.named_parameters():
             print(key, value.shape)
-
-        self.to(self.device)
 
         self.meta_optimizer = optimizers.build_meta_optimizer(
             params=self.trainable_parameters(),

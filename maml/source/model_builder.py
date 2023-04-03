@@ -250,17 +250,17 @@ class BaseLearner(nn.Module):
                                                       1
                                                       )
 
-        # self.layer_dict['linear_2'] = MetaLinearLayer(self.output_shape,
-        #                                               self.output_shape,
-        #                                               2
-        #                                               )
+        self.layer_dict['linear_2'] = MetaLinearLayer(self.output_shape,
+                                                      self.output_shape,
+                                                      2
+                                                      )
 
 
     def forward(self, x_sample, params=None, is_query_set=False):
 
         output = self.layer_dict['lstm'](x_sample, params, is_query_set)
         output = self.layer_dict['linear_1'](output, params)
-        # output = self.layer_dict['linear_2'](output, params)
+        output = self.layer_dict['linear_2'](output, params)
         return output[-1].unsqueeze(dim=0)
 
 
@@ -369,5 +369,5 @@ class BaseLearner2(nn.Module):
 
 
 def build_network(input_shape, output_shape, hidden_units, device, meta_classifier):
-    network = BaseLearner(input_shape, output_shape, hidden_units, device, meta_classifier)
+    network = BaseLearner(input_shape, output_shape, hidden_units, device, meta_classifier).to(device)
     return network
