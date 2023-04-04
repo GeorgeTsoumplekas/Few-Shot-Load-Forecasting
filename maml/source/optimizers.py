@@ -74,6 +74,7 @@ class LSLRGradientDescentLearningRule(nn.Module):
                 the learning dynamic will be unstable and may diverge, while
                 if set too small learning will proceed very slowly.
         """
+
         super(LSLRGradientDescentLearningRule, self).__init__()
         # print(init_learning_rate)
         assert init_learning_rate > 0., 'learning_rate should be positive.'
@@ -101,6 +102,7 @@ class LSLRGradientDescentLearningRule(nn.Module):
                 with respect to each of the parameters passed to `initialise`
                 previously, with this list expected to be in the same order.
         """
+
         return {
             key: names_weights_dict[key]
             - self.names_learning_rates_dict[key.replace(".", "-")][num_step]

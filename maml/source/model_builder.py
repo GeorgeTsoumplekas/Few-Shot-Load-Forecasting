@@ -284,6 +284,10 @@ class BaseLearner(nn.Module):
                     params[name].grad = None
 
 
+    def reset_states(self):
+        self.layer_dict['lstm'].reset_states()
+
+
 class BaseLearner2(nn.Module):
 
     def __init__(self,

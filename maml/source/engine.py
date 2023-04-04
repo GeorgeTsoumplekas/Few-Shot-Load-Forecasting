@@ -23,26 +23,22 @@ def set_torch_seed(seed):
 
 
 class MetaLearner(nn.Module):
-    def __init__(self, opt_config, data_config):
+    def __init__(self, args, data_config):
         super(MetaLearner, self).__init__()
 
         self.device = utils.set_device()
-        self.num_epochs = opt_config['train_epochs']
-        self.task_batch_size = opt_config['task_batch_size']
-        self.sample_batch_size = opt_config['sample_batch_size']
-        self.lstm_hidden_units = opt_config['lstm_hidden_units']
-        self.init_learning_rate = float(opt_config['init_learning_rate'])
-        self.meta_learning_rate = float(opt_config['meta_learning_rate'])
-        self.T_max = opt_config['T_max']
-        self.eta_min = float(opt_config['eta_min'])
+        self.num_epochs = args['train_epochs']
+        self.task_batch_size = args['task_batch_size']
+        self.sample_batch_size = args['sample_batch_size']
+        self.lstm_hidden_units = args['lstm_hidden_units']
+        self.init_learning_rate = args['init_learning_rate']
+        self.meta_learning_rate = args['meta_learning_rate']
+        self.T_max = self.num_epochs
+        self.eta_min = args['eta_min']
         self.data_config = data_config
         self.output_shape = data_config['pred_days']*data_config['day_measurements']
-        self.num_inner_steps = opt_config['num_inner_steps']
-        self.seed = opt_config['seed']
-        self.rng = set_torch_seed(self.seed)
-        self.multi_step_loss_num_epochs = opt_config['multi_step_loss_num_epochs']
-        self.second_order = opt_config['second_order']
-        self.second_to_first_order_epoch = opt_config['second_to_first_order_epoch']
+        self.num_inner_steps = args['num_inner_steps']
+        self.multi_step_loss_num_epochs = self.num_inner_steps
 
         self.network = model_builder.build_network(input_shape=1,
                                                    output_shape=self.output_shape,
@@ -255,7 +251,7 @@ class MetaLearner(nn.Module):
 
         for epoch in range(self.num_epochs):
             epoch = int(epoch)
-            print(f"Epoch {epoch+1} of {self.num_epochs}.")
+            print(f"\nEpoch {epoch+1} of {self.num_epochs}.")
             use_second_order = self.second_order and (epoch < self.second_to_first_order_epoch)
 
             print(f"Use second order: {use_second_order}")
@@ -269,7 +265,7 @@ class MetaLearner(nn.Module):
 
             # Iterate through every task in the train tasks set
             for task_idx, (train_task_data, _) in enumerate(train_tasks_dataloader):
-                print(f"Train task {task_idx+1} / {len(train_tasks_dataloader)}")
+                print(f"\nTrain task {task_idx+1} / {len(train_tasks_dataloader)}\n")
 
                 train_dataloader, test_dataloader = data_setup.build_task(
                     task_data=train_task_data,
@@ -294,6 +290,8 @@ class MetaLearner(nn.Module):
                 # Inner loop steps
                 for inner_epoch in range(self.num_inner_steps):
                     print(f"Inner epoch {inner_epoch+1} / {self.num_inner_steps}")
+
+                    self.network.reset_states()
 
                     # Net forward on support set
                     inner_epoch_support_loss = self.inner_loop_forward(
@@ -331,7 +329,7 @@ class MetaLearner(nn.Module):
                         is_query_set=True
                     )
 
-                    print(f"Query set loss: {inner_epoch_query_loss}")
+                    print(f"Query set loss: {inner_epoch_query_loss}\n")
 
                     task_query_losses.append(
                         per_step_loss_importance[inner_epoch] * inner_epoch_query_loss
@@ -342,7 +340,7 @@ class MetaLearner(nn.Module):
                 print(f"Task query set losses: {task_query_losses}")
                 total_losses.append(task_query_losses)
 
-            print(f"Total losses: {total_losses}")
+            print(f"\nTotal losses: {total_losses}")
 
             # Losses is the double sum (eq.4 page 5 in How to train Your MAML)
             losses = self.get_across_task_loss_metrics(total_losses=total_losses)
@@ -356,7 +354,7 @@ class MetaLearner(nn.Module):
             # Get new lr from scheduler
             losses['meta_learning_rate'] = self.meta_scheduler.get_lr()[0]
 
-            print(f"Losses: {losses}")
+            print(f"\nLosses: {losses}")
 
             self.meta_scheduler.step()
 
@@ -366,7 +364,7 @@ class MetaLearner(nn.Module):
                 else:
                     epoch_losses[key].append(float(value))
 
-            print(f"Epoch losses: {epoch_losses}")
+            print(f"\nEpoch losses: {epoch_losses}")
 
             train_losses = self.build_summary_dict(epoch_losses=epoch_losses,
                                                    phase="train",
