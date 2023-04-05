@@ -203,7 +203,7 @@ class MetaLSTMLayer2(nn.Module):
             # samples to be inferred are not necessarily fed sequentially to the model.
             self.reset_states()
 
-        if is_query_set:
+        if self.training and is_query_set:
             self.reset_states()
 
         hx = (self.h_n, self.c_n)
@@ -219,7 +219,7 @@ class MetaLSTMLayer2(nn.Module):
                                                 self.training,
                                                 False,
                                                 True)
-        
+
         return output.view(-1, self.hidden_units)
 
 
@@ -375,3 +375,8 @@ class BaseLearner2(nn.Module):
 def build_network(input_shape, output_shape, hidden_units, device, meta_classifier):
     network = BaseLearner(input_shape, output_shape, hidden_units, device, meta_classifier).to(device)
     return network
+
+# layer_dict-lstm-weight_ih_l0
+# network.layer_dict.lstm.weight_ih_l0
+# layer_dict-linear_1-weights
+# network.layer_dict.linear_1.weights

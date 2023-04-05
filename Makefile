@@ -5,6 +5,7 @@
 # aggregate: aggregate idividual preprocessed time series
 # experiment_1: execute task invariant lstm
 # experiment_2: execute task specific lstm
+# MAML: execute MAML model
 
 VENV_PATH='.venv/bin/activate'
 
@@ -26,6 +27,9 @@ experiment_1: task_invariant_lstm/config.yaml data/iONA_train_aggregated/* data/
 
 experiment_2: task_specific_lstm/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/*
 	./task_specific_lstm/train_script
+
+MAML: maml/config.yaml data/mini_iONA_train_aggregated/* data/mini_iONA_test_aggregated/*
+	./maml/train_script
 
 .PHONY: clean
 clean:
