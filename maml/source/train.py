@@ -11,6 +11,7 @@ from sklearn.model_selection import KFold
 import torch
 
 import engine
+from utils import plot_meta_train_losses
 
 
 # Suppress warning that occurs due to accessing a non-leaf tensor
@@ -66,7 +67,9 @@ def objective(trial, ht_config, data_config, data_filenames):
         'init_learning_rate': config['init_learning_rate'],
         'meta_learning_rate': config['meta_learning_rate'],
         'eta_min': config['eta_min'],
-        'num_inner_steps': config['num_inner_steps']
+        'num_inner_steps': config['num_inner_steps'],
+        'second_order': config['second_order'],
+        'second_to_first_order_epoch': config['second_to_first_order_epoch']
     }
 
     # Cross-validation splits - they should be random since we are splitting the tasks
@@ -149,7 +152,9 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
         'train_epochs': best_trial['params_train_epochs'].values[0],
         'lstm_hidden_units': best_trial['params_lstm_hidden_units'].values[0],
         'init_learning_rate': best_trial['params_init_learning_rate'].values[0],
-        'meta_learning_rate': best_trial['params_meta_learning_rate'].values[0]
+        'meta_learning_rate': best_trial['params_meta_learning_rate'].values[0],
+        'second_order': ht_config['second_order'],
+        'second_to_first_order_epoch': ht_config['second_to_first_order_epoch']
     }
 
     return opt_config
@@ -169,13 +174,20 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
         'init_learning_rate': opt_config['init_learning_rate'],
         'meta_learning_rate': opt_config['meta_learning_rate'],
         'eta_min': float(opt_config['eta_min']),
-        'num_inner_steps': opt_config['num_inner_steps']
+        'num_inner_steps': opt_config['num_inner_steps'],
+        'second_order': opt_config['second_order'],
+        'second_to_first_order_epoch': opt_config['second_to_first_order_epoch']
     }
 
     meta_learner = engine.build_meta_learner(args=args,
                                              data_config=data_config)
 
-    train_losses = meta_learner.meta_train(data_filenames)
+    train_losses, epoch_mean_support_losses, epoch_mean_query_losses = meta_learner.meta_train(
+        data_filenames)
+
+    plot_meta_train_losses(epoch_mean_support_losses,
+                           epoch_mean_query_losses,
+                           results_dir_name)
 
     # Save the weights that occur from meta-training the optimal model
     meta_learner.save_parameters(results_dir_name)
@@ -183,7 +195,6 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
     return train_losses
 
 
-# TODO
 def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_name):
 
     # Set random seed for reproducibility purposes
@@ -198,24 +209,19 @@ def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_n
         'init_learning_rate': opt_config['init_learning_rate'],
         'meta_learning_rate': opt_config['meta_learning_rate'],
         'eta_min': float(opt_config['eta_min']),
-        'num_inner_steps': opt_config['num_inner_steps']
+        'num_inner_steps': opt_config['num_inner_steps'],
+        'second_order': opt_config['second_order'],
+        'second_to_first_order_epoch': opt_config['second_to_first_order_epoch']
     }
-
-    model_save_path = results_dir_name + 'optimal_trained_model.pth'
 
     meta_learner = engine.build_meta_learner(args=args,
                                              data_config=data_config)
-    
-    loaded_state_dict = torch.load(f=model_save_path)
-
-    # print("Loaded state dict")
-    # for name, param in loaded_state_dict.items():
-    #     print(name, param)
 
     # Create initial weights (weights_names attribute)
+    meta_learner.load_optimal_inner_loop_params(results_dir_name)
 
-    # Meta-evaluation (probably using self.evaluate)
-
+    # Meta-evaluation
+    meta_learner.meta_test_optimal(data_filenames, results_dir_name)
 
 
 # TODO: change appropriately
@@ -255,15 +261,10 @@ def main():
         'train_epochs': 2,
         'lstm_hidden_units': 16,
         'init_learning_rate': 0.0016075883117690475,
-        'meta_learning_rate': 0.0005439505246783044
+        'meta_learning_rate': 0.0005439505246783044,
+        'second_order': True,
+        'second_to_first_order_epoch': 1
     }
-
-    # # Used to test if everything runs ok during training
-    # meta_learner = engine.build_meta_learner(opt_config=opt_config,
-    #                                          data_config=config['data_config'])
-    
-    # train_losses = meta_learner.meta_train(train_filenames)
-    # print(f"\nTrain_losses: {train_losses}")
 
     # Create results directory
     results_dir_name = './maml/results/'
@@ -281,14 +282,13 @@ def main():
     #                                    data_config,
     #                                    train_filenames)
 
-    # print(f"Opt config: {opt_config}")
+    print(f"Opt config: {opt_config}")
 
-    # # Train optimal model and plot train loss
-    # train_losses = meta_train_optimal(opt_config,
-    #                                   data_config,
-    #                                   train_filenames,
-    #                                   results_dir_name)
-    # # utils.plot_train_loss(train_losses, results_dir_name)
+    # Train optimal model and plot train loss
+    _ = meta_train_optimal(opt_config,
+                                      data_config,
+                                      train_filenames,
+                                      results_dir_name)
 
     # Load optimal meta-trained model and evaluate it on test tasks
     meta_evaluate_optimal(opt_config,

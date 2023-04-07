@@ -91,6 +91,11 @@ class LSLRGradientDescentLearningRule(nn.Module):
             self.names_learning_rates_dict[key.replace(".", "-")] = nn.Parameter(
                 data=torch.ones(self.total_num_inner_loop_steps + 1) * self.init_learning_rate,
                 requires_grad=self.use_learnable_learning_rates)
+ 
+
+    def get_learned_lr(self, inner_loop_lr_dict):
+        for name, param in inner_loop_lr_dict.items():
+            self.names_learning_rates_dict[name] = param
 
 
     def update_params(self, names_weights_dict, names_grads_wrt_params_dict, num_step):
@@ -102,6 +107,8 @@ class LSLRGradientDescentLearningRule(nn.Module):
                 with respect to each of the parameters passed to `initialise`
                 previously, with this list expected to be in the same order.
         """
+
+        # TODO test to see if we have the correct learnt learning rates during evaluation
 
         return {
             key: names_weights_dict[key]

@@ -12,6 +12,8 @@
     sample_batch_size: 1
     num_inner_steps: 2
     eta_min: 1e-6
+    second_order: True
+    second_to_first_order_epoch: 1
     train_epochs:
       lower_bound: 2
       upper_bound: 4
