@@ -1,7 +1,16 @@
 import os
+import random
 
+import numpy as np
 from matplotlib import pyplot as plt
 import torch
+
+
+def set_random_seeds(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
 
 def set_device():

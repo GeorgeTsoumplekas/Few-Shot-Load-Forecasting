@@ -5,9 +5,9 @@
     pred_days: 1
     test_days: 7
  n_trials: 3
+ seed: 42
  ht_config:
     k_folds: 3
-    seed: 42
     task_batch_size: 1
     sample_batch_size: 1
     num_inner_steps: 2

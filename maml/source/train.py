@@ -11,7 +11,7 @@ from sklearn.model_selection import KFold
 import torch
 
 import engine
-from utils import plot_meta_train_losses
+from utils import plot_meta_train_losses, set_random_seeds
 
 
 # Suppress warning that occurs due to accessing a non-leaf tensor
@@ -23,7 +23,6 @@ def objective(trial, ht_config, data_config, data_filenames):
     # Hyperparameter search space
     config = {
         'kfolds': ht_config['k_folds'],
-        'seed': ht_config['seed'],
         'task_batch_size': ht_config['task_batch_size'],
         'sample_batch_size': ht_config['sample_batch_size'],
         'num_inner_steps': ht_config['num_inner_steps'],
@@ -51,10 +50,6 @@ def objective(trial, ht_config, data_config, data_filenames):
             log=ht_config['meta_learning_rate']['log']
         )
     }
-
-    # Set random seed for reproducibility purposes
-    torch.manual_seed(config['seed'])
-    torch.cuda.manual_seed(config['seed'])
 
     mean_fold_val_losses = {}  # Contains the mean validation loss of each fold
 
@@ -144,7 +139,6 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
     print(f"Best trial: {best_trial}")
 
     opt_config = {
-        'seed': ht_config['seed'],
         'task_batch_size': ht_config['task_batch_size'],
         'sample_batch_size': ht_config['sample_batch_size'],
         'num_inner_steps': ht_config['num_inner_steps'],
@@ -161,10 +155,6 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
 
 
 def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name):
-
-    # Set random seed for reproducibility purposes
-    torch.manual_seed(opt_config['seed'])
-    torch.cuda.manual_seed(opt_config['seed'])
 
     args = {
         'train_epochs': opt_config['train_epochs'],
@@ -196,10 +186,6 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
 
 
 def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_name):
-
-    # Set random seed for reproducibility purposes
-    torch.manual_seed(opt_config['seed'])
-    torch.cuda.manual_seed(opt_config['seed'])
 
     args = {
         'train_epochs': opt_config['train_epochs'],
@@ -253,7 +239,6 @@ def main():
             test_filenames.append(filename)
 
     opt_config = {
-        'seed': 42,
         'task_batch_size': 1,
         'sample_batch_size': 1,
         'num_inner_steps': 2,
@@ -270,6 +255,9 @@ def main():
     results_dir_name = './maml/results/'
     if not os.path.exists(results_dir_name):
         os.makedirs(results_dir_name)
+
+    # Set random seeds for reproducibility purposes
+    set_random_seeds(config['seed'])
 
     # Hyperparameter tuning
     n_trials = config['n_trials']
