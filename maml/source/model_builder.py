@@ -83,63 +83,12 @@ class MetaLinearLayer(nn.Module):
             weight, bias = self.weights, self.bias
 
         return F.linear(input=x, weight=weight, bias=bias)
-
+    
 
 class MetaLSTMLayer(nn.Module):
 
     def __init__(self, hidden_units, input_shape, device):
         super(MetaLSTMLayer, self).__init__()
-        self.hidden_units = hidden_units
-        self.input_shape = input_shape
-
-        self.lstm = nn.LSTM(self.input_shape, self.hidden_units, batch_first=True)
-        self.h_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(device)
-        self.c_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(device)
-
-        self.device = device
-
-
-    def reset_states(self):
-        """Reset the hidden and cell state of the model."""
-
-        self.h_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(self.device)
-        self.c_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(self.device)
-
-
-    def forward(self, x_sample, state_dict=None):
-        if state_dict is not None:
-            new_state_dict = extract_lstm_dict(state_dict)
-        else:
-            new_state_dict = self.lstm.load_state_dict()
-
-        # Add an extra dimension so that the input is in a batch format.
-        network_input = x_sample.view(x_sample.shape[0], x_sample.shape[1], self.input_shape)
-
-        # TODO: Revisit this part because we have to consider both meta-training and
-        # training within a task
-        if self.training is True:
-            # The hidden and cell states should be detached since we do not want to learn their
-            # values through back-propagation, but rather keep the values that occured from the
-            # previously seen samples (due to the samples being fed sequentially).
-            self.h_n, self.c_n = self.h_n.detach(), self.c_n.detach()
-        else:
-            # During inference, we want to reset the model's hidden and cell states, since the
-            # samples to be inferred are not necessarily fed sequentially to the model.
-            self.reset_states()
-
-        output, (self.h_n, self.c_n) = nn.utils.stateless.functional_call(self.lstm, 
-                                                                          new_state_dict, 
-                                                                          (network_input, 
-                                                                           (self.h_n, self.c_n)))
-        output = output.view(-1, self.hidden_units)
-
-        return output
-    
-
-class MetaLSTMLayer2(nn.Module):
-
-    def __init__(self, hidden_units, input_shape, device):
-        super(MetaLSTMLayer2, self).__init__()
         self.input_shape = input_shape
         self.hidden_units = hidden_units
         self.device = device
@@ -241,7 +190,7 @@ class BaseLearner(nn.Module):
         self.meta_classifier = meta_classifier
 
         self.layer_dict = nn.ModuleDict()
-        self.layer_dict['lstm'] = MetaLSTMLayer2(self.hidden_units,
+        self.layer_dict['lstm'] = MetaLSTMLayer(self.hidden_units,
                                                 self.input_shape,
                                                 self.device)
         
@@ -288,95 +237,6 @@ class BaseLearner(nn.Module):
         self.layer_dict['lstm'].reset_states()
 
 
-class BaseLearner2(nn.Module):
-
-    def __init__(self,
-                 input_shape,
-                 output_shape,
-                 hidden_units,
-                 device,
-                 meta_classifier=True):
-
-        super(BaseLearner2, self).__init__()
-
-        self.hidden_units = hidden_units
-        self.input_shape = input_shape
-        self.output_shape = output_shape
-
-        self.device = device
-        self.meta_classifier = meta_classifier
-
-        self.layer_dict = nn.ModuleDict()
-
-        self.layer_dict['lstm'] = nn.LSTM(input_shape, self.hidden_units, batch_first=True)
-        self.layer_dict['linear_1'] = nn.Linear(self.hidden_units, self.output_shape)
-        self.layer_dict['linear_2'] = nn.Linear(self.output_shape, self.output_shape)
-
-        self.h_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(device)
-        self.c_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(device)
-
-    
-    def reset_states(self):
-        """Reset the hidden and cell state of the model."""
-
-        self.h_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(self.device)
-        self.c_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(self.device)
-
-
-    def forward(self, x_sample):
-
-        # Add an extra dimension so that the input is in a batch format.
-        network_input = x_sample.view(x_sample.shape[0], x_sample.shape[1], self.input_shape)
-
-        # TODO: Revisit this part because we have to consider both meta-training and
-        # training within a task
-        if self.training is True:
-            # The hidden and cell states should be detached since we do not want to learn their
-            # values through back-propagation, but rather keep the values that occured from the
-            # previously seen samples (due to the samples being fed sequentially).
-            self.h_n, self.c_n = self.h_n.detach(), self.c_n.detach()
-        else:
-            # During inference, we want to reset the model's hidden and cell states, since the
-            # samples to be inferred are not necessarily fed sequentially to the model.
-            self.reset_states()
-
-        output, (self.h_n, self.c_n) = self.layer_dict['lstm'](network_input, (self.h_n, self.c_n))
-        output = output.view(-1, self.hidden_units)
-        output = self.layer_dict['linear_1'](output)
-        output = self.layer_dict['linear_2'](output)
-
-        # return output[-1].unsqueeze(dim=0)
-
-        return output[-1].unsqueeze_(dim=0)
-
-
-    def zero_grad(self, params=None):
-        if params is None:
-            for param in self.parameters():
-                if (
-                    param.requires_grad == True
-                    and param.grad is not None
-                    and torch.sum(param.grad) > 0
-                ):
-                    # print(param.grad)
-                    param.grad.zero_()
-        else:
-            for name, param in params.items():
-                if (
-                    param.requires_grad == True
-                    and param.grad is not None
-                    and torch.sum(param.grad) > 0
-                ):
-                    # print(param.grad)
-                    param.grad.zero_()
-                    params[name].grad = None
-
-
 def build_network(input_shape, output_shape, hidden_units, device, meta_classifier):
     network = BaseLearner(input_shape, output_shape, hidden_units, device, meta_classifier).to(device)
     return network
-
-# layer_dict-lstm-weight_ih_l0
-# network.layer_dict.lstm.weight_ih_l0
-# layer_dict-linear_1-weights
-# network.layer_dict.linear_1.weights

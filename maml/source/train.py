@@ -11,7 +11,8 @@ from sklearn.model_selection import KFold
 import torch
 
 import engine
-from utils import plot_meta_train_losses, set_random_seeds, set_cuda_reproducibility
+from utils import plot_meta_train_losses, set_random_seeds, set_cuda_reproducibility, \
+                  set_model_args
 
 
 # Suppress warning that occurs due to accessing a non-leaf tensor
@@ -56,18 +57,7 @@ def objective(trial, ht_config, data_config, data_filenames):
     mean_fold_val_losses = {}  # Contains the mean validation loss of each fold
 
     k_folds = config['kfolds']
-    args = {
-        'train_epochs': config['train_epochs'],
-        'task_batch_size': config['task_batch_size'],
-        'sample_batch_size': config['sample_batch_size'],
-        'lstm_hidden_units': config['lstm_hidden_units'],
-        'init_learning_rate': config['init_learning_rate'],
-        'meta_learning_rate': config['meta_learning_rate'],
-        'eta_min': config['eta_min'],
-        'num_inner_steps': config['num_inner_steps'],
-        'second_order': config['second_order'],
-        'second_to_first_order_epoch': config['second_to_first_order_epoch']
-    }
+    args = set_model_args(config)
 
     # Cross-validation splits - they should be random since we are splitting the tasks
     # (non-sequential) and not a single timeseries (sequential)
@@ -86,12 +76,13 @@ def objective(trial, ht_config, data_config, data_filenames):
 
         # Meta-Train
         # print("Meta-Training started..")
-        meta_learner.hp_tuning_meta_train(train_filenames)
+        meta_learner.meta_train(train_filenames, optimal_mode=False)
         # print("Meta-Training finshed.\n")
 
         # Meta-Evaluation
         # print("Meta-Validation started..")
-        mean_fold_val_loss = meta_learner.hp_tuning_meta_evaluate(val_filenames)
+        mean_fold_val_loss = meta_learner.meta_test(data_filenames=val_filenames,
+                                                    optimal_mode=False)
         # print("Meta-Validation finshed.\n")
 
         mean_fold_val_losses[fold] = mean_fold_val_loss
@@ -158,24 +149,14 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
 
 def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name):
 
-    args = {
-        'train_epochs': opt_config['train_epochs'],
-        'task_batch_size': opt_config['task_batch_size'],
-        'sample_batch_size': opt_config['sample_batch_size'],
-        'lstm_hidden_units': opt_config['lstm_hidden_units'],
-        'init_learning_rate': opt_config['init_learning_rate'],
-        'meta_learning_rate': opt_config['meta_learning_rate'],
-        'eta_min': float(opt_config['eta_min']),
-        'num_inner_steps': opt_config['num_inner_steps'],
-        'second_order': opt_config['second_order'],
-        'second_to_first_order_epoch': opt_config['second_to_first_order_epoch']
-    }
+    args = set_model_args(opt_config)
 
     meta_learner = engine.build_meta_learner(args=args,
                                              data_config=data_config)
 
     train_losses, epoch_mean_support_losses, epoch_mean_query_losses = meta_learner.meta_train(
-        data_filenames)
+        data_filenames,
+        optimal_mode=True)
 
     plot_meta_train_losses(epoch_mean_support_losses,
                            epoch_mean_query_losses,
@@ -189,18 +170,7 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
 
 def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_name):
 
-    args = {
-        'train_epochs': opt_config['train_epochs'],
-        'task_batch_size': opt_config['task_batch_size'],
-        'sample_batch_size': opt_config['sample_batch_size'],
-        'lstm_hidden_units': opt_config['lstm_hidden_units'],
-        'init_learning_rate': opt_config['init_learning_rate'],
-        'meta_learning_rate': opt_config['meta_learning_rate'],
-        'eta_min': float(opt_config['eta_min']),
-        'num_inner_steps': opt_config['num_inner_steps'],
-        'second_order': opt_config['second_order'],
-        'second_to_first_order_epoch': opt_config['second_to_first_order_epoch']
-    }
+    args = set_model_args(opt_config)
 
     meta_learner = engine.build_meta_learner(args=args,
                                              data_config=data_config)
@@ -209,10 +179,11 @@ def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_n
     meta_learner.load_optimal_inner_loop_params(results_dir_name)
 
     # Meta-evaluation
-    meta_learner.meta_test_optimal(data_filenames, results_dir_name)
+    meta_learner.meta_test(data_filenames=data_filenames,
+                           optimal_mode=True,
+                           results_dir_name=results_dir_name)
 
 
-# TODO: change appropriately
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_dir', dest='train_dir')
@@ -293,6 +264,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# TODO: Na 3anadokimasw me second order kai gpu monitoring

@@ -33,6 +33,24 @@ def set_device():
     return device
 
 
+def set_model_args(config):
+
+    args = {
+        'train_epochs': config['train_epochs'],
+        'task_batch_size': config['task_batch_size'],
+        'sample_batch_size': config['sample_batch_size'],
+        'lstm_hidden_units': config['lstm_hidden_units'],
+        'init_learning_rate': float(config['init_learning_rate']),
+        'meta_learning_rate': float(config['meta_learning_rate']),
+        'eta_min': float(config['eta_min']),
+        'num_inner_steps': config['num_inner_steps'],
+        'second_order': config['second_order'],
+        'second_to_first_order_epoch': config['second_to_first_order_epoch']
+    }
+
+    return args
+
+
 def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
     """Plot predicted vs true values of the given test set.
 

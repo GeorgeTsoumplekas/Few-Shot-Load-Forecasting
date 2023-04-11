@@ -108,8 +108,6 @@ class LSLRGradientDescentLearningRule(nn.Module):
                 previously, with this list expected to be in the same order.
         """
 
-        # TODO test to see if we have the correct learnt learning rates during evaluation
-
         return {
             key: names_weights_dict[key]
             - self.names_learning_rates_dict[key.replace(".", "-")][num_step]
