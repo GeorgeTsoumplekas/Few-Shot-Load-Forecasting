@@ -358,7 +358,7 @@ class BaseLearner2(nn.Module):
                     and param.grad is not None
                     and torch.sum(param.grad) > 0
                 ):
-                    print(param.grad)
+                    # print(param.grad)
                     param.grad.zero_()
         else:
             for name, param in params.items():
@@ -367,7 +367,7 @@ class BaseLearner2(nn.Module):
                     and param.grad is not None
                     and torch.sum(param.grad) > 0
                 ):
-                    print(param.grad)
+                    # print(param.grad)
                     param.grad.zero_()
                     params[name].grad = None
 

@@ -11,7 +11,7 @@ from sklearn.model_selection import KFold
 import torch
 
 import engine
-from utils import plot_meta_train_losses, set_random_seeds
+from utils import plot_meta_train_losses, set_random_seeds, set_cuda_reproducibility
 
 
 # Suppress warning that occurs due to accessing a non-leaf tensor
@@ -27,6 +27,8 @@ def objective(trial, ht_config, data_config, data_filenames):
         'sample_batch_size': ht_config['sample_batch_size'],
         'num_inner_steps': ht_config['num_inner_steps'],
         'eta_min': float(ht_config['eta_min']),
+        'second_order': ht_config['second_order'],
+        'second_to_first_order_epoch': ht_config['second_to_first_order_epoch'],
         'train_epochs': trial.suggest_int(
             'train_epochs',
             int(ht_config['train_epochs']['lower_bound']),
@@ -72,7 +74,7 @@ def objective(trial, ht_config, data_config, data_filenames):
     kfold = KFold(n_splits=k_folds, shuffle=True)
 
     for fold, (train_idx,val_idx) in enumerate(kfold.split(data_filenames)):
-        print(f"Fold {fold+1}/{k_folds}\n")
+        # print(f"Fold {fold+1}/{k_folds}\n")
         meta_learner = engine.build_meta_learner(args=args,
                                                  data_config=data_config)
         
@@ -83,14 +85,14 @@ def objective(trial, ht_config, data_config, data_filenames):
         val_filenames = [data_filenames[idx] for idx in val_idx]
 
         # Meta-Train
-        print("Meta-Training started..")
+        # print("Meta-Training started..")
         meta_learner.hp_tuning_meta_train(train_filenames)
-        print("Meta-Training finshed.\n")
+        # print("Meta-Training finshed.\n")
 
         # Meta-Evaluation
-        print("Meta-Validation started..")
+        # print("Meta-Validation started..")
         mean_fold_val_loss = meta_learner.hp_tuning_meta_evaluate(val_filenames)
-        print("Meta-Validation finshed.\n")
+        # print("Meta-Validation finshed.\n")
 
         mean_fold_val_losses[fold] = mean_fold_val_loss
 
@@ -136,7 +138,7 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
     # The best trial is the one that minimizes the objective value (mean validation loss)
     best_trial = trials_df[trials_df.value == trials_df.value.min()]
 
-    print(f"Best trial: {best_trial}")
+    # print(f"Best trial: {best_trial}")
 
     opt_config = {
         'task_batch_size': ht_config['task_batch_size'],
@@ -238,23 +240,27 @@ def main():
             filename = root + file
             test_filenames.append(filename)
 
-    opt_config = {
-        'task_batch_size': 1,
-        'sample_batch_size': 1,
-        'num_inner_steps': 2,
-        'eta_min': float(1e-6),
-        'train_epochs': 2,
-        'lstm_hidden_units': 16,
-        'init_learning_rate': 0.0016075883117690475,
-        'meta_learning_rate': 0.0005439505246783044,
-        'second_order': True,
-        'second_to_first_order_epoch': 1
-    }
+    # opt_config = {
+    #     'task_batch_size': 1,
+    #     'sample_batch_size': 1,
+    #     'num_inner_steps': 2,
+    #     'eta_min': float(1e-6),
+    #     'train_epochs': 2,
+    #     'lstm_hidden_units': 16,
+    #     'init_learning_rate': 0.0016075883117690475,
+    #     'meta_learning_rate': 0.0005439505246783044,
+    #     'second_order': True,
+    #     'second_to_first_order_epoch': 1
+    # }
 
     # Create results directory
     results_dir_name = './maml/results/'
     if not os.path.exists(results_dir_name):
         os.makedirs(results_dir_name)
+
+    # Set CUDA environment variables for reproducibility purposes
+    # So that the LSTMs show deterministic behavior
+    set_cuda_reproducibility()
 
     # Set random seeds for reproducibility purposes
     set_random_seeds(config['seed'])
@@ -264,19 +270,19 @@ def main():
     ht_config = config['ht_config']
     data_config = config['data_config']
 
-    # opt_config = hyperparameter_tuning(n_trials,
-    #                                    results_dir_name,
-    #                                    ht_config,
-    #                                    data_config,
-    #                                    train_filenames)
+    opt_config = hyperparameter_tuning(n_trials,
+                                       results_dir_name,
+                                       ht_config,
+                                       data_config,
+                                       train_filenames)
 
-    print(f"Opt config: {opt_config}")
+    # print(f"Opt config: {opt_config}")
 
     # Train optimal model and plot train loss
     _ = meta_train_optimal(opt_config,
-                                      data_config,
-                                      train_filenames,
-                                      results_dir_name)
+                           data_config,
+                           train_filenames,
+                           results_dir_name)
 
     # Load optimal meta-trained model and evaluate it on test tasks
     meta_evaluate_optimal(opt_config,
@@ -289,5 +295,4 @@ if __name__ == "__main__":
     main()
 
 
-# TODO: Na 3anatsekarw gia reproducibility, random seeds etc
 # TODO: Na 3anadokimasw me second order kai gpu monitoring

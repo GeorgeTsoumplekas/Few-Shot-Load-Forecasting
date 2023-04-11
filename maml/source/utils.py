@@ -6,6 +6,14 @@ from matplotlib import pyplot as plt
 import torch
 
 
+def set_cuda_reproducibility():
+    if torch.cuda.is_available():
+        if torch.version.cuda == "10.1":
+            os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        elif torch.version.cuda >= "10.2":
+            os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:2"
+
+
 def set_random_seeds(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)

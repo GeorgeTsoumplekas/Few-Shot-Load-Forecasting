@@ -34,6 +34,7 @@ fonttools==4.38.0
 fqdn==1.5.1
 gitdb==4.0.10
 GitPython==3.1.30
+graphviz==0.20.1
 greenlet==2.0.2
 htmlmin==0.1.12
 idna==3.4
@@ -141,6 +142,7 @@ tinycss2==1.2.1
 tomli==2.0.1
 tomlkit==0.11.6
 torch==1.13.0
+torchviz==0.0.2
 tornado==6.2
 tqdm==4.64.1
 traitlets==5.6.0
