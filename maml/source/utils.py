@@ -1,5 +1,7 @@
-"""
+"""Collection of utility functions.
 
+These are functions that surround the training/fine-tuning/hyperparameter-tuning processes and
+facilitate them but do not contain any if the main logic of them.
 """
 
 import os
@@ -11,8 +13,9 @@ import torch
 
 
 def set_cuda_reproducibility():
-    """
-    
+    """Make LSTMs deterministic when executed on GPUs to ensure reproducibility.
+
+    See warning at https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html
     """
 
     if torch.cuda.is_available():
@@ -23,9 +26,7 @@ def set_cuda_reproducibility():
 
 
 def set_random_seeds(seed):
-    """
-    
-    """
+    """Set random seeds in all libraries that might be invoked to produce random numbers."""
 
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -46,8 +47,11 @@ def set_device():
 
 
 def set_model_args(config):
-    """
-    
+    """Create a dictionary that contains the parameters to be fed into the Meta-Learning model.
+
+    Args:
+        config: A dictionary that contains the configuration of the whole pipeline, part of
+            are the parameters of the Meta-Learning model.
     """
 
     args = {
@@ -122,18 +126,20 @@ def plot_learning_curve(train_losses, test_losses, results_dir_name, timeseries_
     """Plot the learning curve of the desired model for a specific test task.
 
     The plot contains the train loss and the test loss of the model for the number
-    of epochs that it has been fine-tuned for. The plot is saved as a png file.
+    of inner loop steps. The plot is saved as a png file.
 
     Args:
-        train_losses: A list that contains the train loss of each fine-tune epoch.
-        test_losses: A list that contains the test loss of each training epoch.
+        train_losses: A list that contains the support set loss of each inner loop step for a
+            specific task.
+        test_losses: A list that contains the query set loss of each inner loop step for a
+            specific task.
         results_dir_name: A string with the name of the directory the results will be saved.
         timeseries_code: A list with a string that is the id of the examined timeseries.
     """
 
     plt.figure()
-    plt.plot(train_losses, c='b', label='Train Loss')
-    plt.plot(test_losses, c='r', label='Test Loss')
+    plt.plot(train_losses, c='b', label='Support Set Loss')
+    plt.plot(test_losses, c='r', label='Query Set Loss')
     plt.xlabel('Inner Loop Step')
     plt.ylabel('MSE')
     plt.title('Learning curve of optimal model')
@@ -147,8 +153,17 @@ def plot_learning_curve(train_losses, test_losses, results_dir_name, timeseries_
 
 
 def plot_meta_train_losses(support_losses, query_losses, results_dir_name):
-    """
-    
+    """Plot the learning curve of the model during meta-training.
+
+    The plot contains the mean loss of all tasks' support sets the model sees in each epoch
+    during meta-training. Similarly for all tasks' query sets. The plot is saved as a png file.
+
+    Args:
+        support_losses: A list that contains the mean loss for all meta-train tasks' support sets
+            during each epoch.
+        quer_losses: A list that contains the mean loss for all meta-train tasks' query sets
+            during each epoch.
+        results_dir_name: A string with the name of the directory the results will be saved.
     """
 
     target_file = results_dir_name + 'optimal_train_losses.png'
@@ -158,6 +173,6 @@ def plot_meta_train_losses(support_losses, query_losses, results_dir_name):
     plt.plot(query_losses, c='r', label='Mean query set loss')
     plt.ylabel('MSE')
     plt.xlabel('Epochs')
-    plt.title('Loss of optimal model on support and query sets of train tasks')
+    plt.title('Mean loss of optimal model on support and query sets of train tasks')
     plt.legend()
     plt.savefig(target_file)

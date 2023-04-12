@@ -177,8 +177,6 @@ class MetaLSTMLayer(nn.Module):
         # Add an extra dimension so that the input is in a batch format.
         network_input = x_sample.view(x_sample.shape[0], x_sample.shape[1], self.input_shape)
 
-        # TODO: Revisit this part because we have to consider both meta-training and
-        # training within a task
         if self.training is True:
             # The hidden and cell states should be detached since we do not want to learn their
             # values through back-propagation, but rather keep the values that occured from the
@@ -196,7 +194,7 @@ class MetaLSTMLayer(nn.Module):
 
         # Params: input, (h_n, c_n), weights, bias_flag, num_layers, dropout, training_flag,
         # bidirectional_flag, batch_first_flag
-        output, self.h_n, self.c_n = _VF.lstm(network_input,
+        output, self.h_n, self.c_n = _VF.lstm(network_input,  # pylint: disable=no-member
                                                 h_x,
                                                 weights,
                                                 True,
