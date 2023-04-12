@@ -1,3 +1,7 @@
+"""
+
+"""
+
 import numpy as np
 import torch
 from torch import nn
@@ -10,6 +14,10 @@ import utils
 
 
 class MetaLearner(nn.Module):
+    """
+    
+    """
+
     def __init__(self, args, data_config):
         super(MetaLearner, self).__init__()
 
@@ -20,7 +28,6 @@ class MetaLearner(nn.Module):
         self.lstm_hidden_units = args['lstm_hidden_units']
         self.init_learning_rate = args['init_learning_rate']
         self.meta_learning_rate = args['meta_learning_rate']
-        self.T_max = self.num_epochs
         self.eta_min = args['eta_min']
         self.data_config = data_config
         self.output_shape = data_config['pred_days']*data_config['day_measurements']
@@ -54,12 +61,15 @@ class MetaLearner(nn.Module):
             )
         self.meta_scheduler = optimizers.build_meta_scheduler(
             meta_optimizer=self.meta_optimizer,
-            T_max=self.T_max,
+            num_epochs=self.num_epochs,
             eta_min=self.eta_min
             )
 
 
     def get_per_step_loss_importance(self, epoch):
+        """
+        
+        """
 
         # Initially uniform weights
         loss_weights = (1.0 / self.num_inner_steps) * np.ones(shape=(self.num_inner_steps))
@@ -81,6 +91,10 @@ class MetaLearner(nn.Module):
 
 
     def get_inner_loop_params(self, state_dict, is_copy):
+        """
+        
+        """
+
         names_weights = {}
 
         if is_copy:
@@ -91,9 +105,13 @@ class MetaLearner(nn.Module):
                 names_weights[name] = nn.Parameter(param)
 
         return names_weights
-    
+
 
     def load_optimal_inner_loop_params(self, results_dir_name):
+        """
+        
+        """
+
         model_save_path = results_dir_name + 'optimal_trained_model.pth'
         loaded_state_dict = torch.load(f=model_save_path)
 
@@ -136,6 +154,10 @@ class MetaLearner(nn.Module):
 
 
     def named_params(self):
+        """
+        
+        """
+
         params = {}
 
         for name, param in self.names_weights.items():
@@ -145,9 +167,13 @@ class MetaLearner(nn.Module):
             params[name] = param
 
         return params
-    
+
 
     def save_parameters(self, results_dir_name):
+        """
+        
+        """
+
         named_params = self.named_params()
 
         for name, param in named_params.items():
@@ -158,7 +184,11 @@ class MetaLearner(nn.Module):
         torch.save(obj=self.state_dict(), f=target_file)
 
 
-    def inner_loop_forward(self, dataloader, weights, is_query_set):
+    # inner loop forward
+    def forward(self, dataloader, weights, is_query_set):
+        """
+        
+        """
 
         self.network.train()
         train_step_loss = 0.0
@@ -181,8 +211,8 @@ class MetaLearner(nn.Module):
                           use_second_order,
                           inner_epoch):
         """
-        Applies an inner loop update given current step's loss, the weights to update, a flag indicating whether to use
-        second order derivatives and the current step's index.
+        Applies an inner loop update given current step's loss, the weights to update, 
+        a flag indicating whether to use second order derivatives and the current step's index.
         :param loss: Current step's loss with respect to the support set.
         :param names_weights_copy: A dictionary with names to parameters to update.
         :param use_second_order: A boolean flag of whether to use second order derivatives.
@@ -190,11 +220,13 @@ class MetaLearner(nn.Module):
         :return: A dictionary with the updated weights (name, param)
         """
 
-        self.network.zero_grad(params=names_weights_copy)
+        self.network.zero_grads(params=names_weights_copy)
 
+        # Using second order causes the crash - change to use_second_order when having
+        # the available resources
         grads = torch.autograd.grad(inner_epoch_loss,
                                     names_weights_copy.values(),
-                                    create_graph=use_second_order,  # this causes the crash - change to use_second_order when having the available resources
+                                    create_graph=use_second_order,
                                     allow_unused=True)
 
         names_grads_copy = dict(zip(names_weights_copy.keys(), grads))
@@ -210,43 +242,53 @@ class MetaLearner(nn.Module):
             num_step=inner_epoch)
 
         return names_weights_copy
-        
+
 
     def meta_update(self, loss):
         """
         Applies an outer loop update on the meta-parameters of the model.
         :param loss: The current crossentropy loss.
         """
+
         self.meta_optimizer.zero_grad()
         loss.backward()
         self.meta_optimizer.step()
 
 
     def get_across_task_loss_metrics(self, total_losses):
+        """
+        
+        """
+
         losses = {'loss': torch.mean(torch.stack(total_losses))}
 
         return losses
-    
+
 
     def build_summary_dict(self, epoch_losses, phase, train_losses=None):
         """
         Builds/Updates a summary dict directly from the metric dict of the current iteration.
         :param total_losses: Current dict with total losses (not aggregations) from experiment
         :param phase: Current training phase
-        :param summary_losses: Current summarised (aggregated/summarised) losses stats means, stdv etc.
+        :param summary_losses: Current summarised (aggregated/summarised) losses stats means,
+        stdv etc.
         :return: A new summary dict with the updated summary statistics information.
         """
+
         if train_losses is None:
             train_losses = {}
 
         for key in epoch_losses:
-            train_losses["{}_{}_mean".format(phase, key)] = np.mean(epoch_losses[key])
-            train_losses["{}_{}_std".format(phase, key)] = np.std(epoch_losses[key])
+            train_losses[f"{phase}_{key}_mean"] = np.mean(epoch_losses[key])
+            train_losses[f"{phase}_{key}_std"] = np.std(epoch_losses[key])
 
         return train_losses
 
 
     def meta_train(self, data_filenames, optimal_mode):
+        """
+        
+        """
 
         # print("Meta-Train started.\n")
 
@@ -304,14 +346,14 @@ class MetaLearner(nn.Module):
                     self.network.reset_states()
 
                     # Net forward on support set
-                    inner_epoch_support_loss = self.inner_loop_forward(
+                    inner_epoch_support_loss = self.forward(
                         dataloader=train_dataloader,
                         weights=names_weights_copy,
                         is_query_set=False
                         )
 
                     # print(f"Support set loss: {inner_epoch_support_loss}")
-                    
+
                     if optimal_mode and (inner_epoch == (self.num_inner_steps-1)):
                         with torch.no_grad():
                             tasks_mean_support_losses.append(
@@ -326,7 +368,7 @@ class MetaLearner(nn.Module):
                     )
 
                     # Net forward on query set
-                    inner_epoch_query_loss = self.inner_loop_forward(
+                    inner_epoch_query_loss = self.forward(
                         dataloader=test_dataloader,
                         weights=names_weights_copy,
                         is_query_set=True
@@ -382,12 +424,15 @@ class MetaLearner(nn.Module):
 
 
     def evaluate(self, dataloader, weights, is_query_set=True):
+        """
+        
+        """
 
         self.network.eval()
         val_task_loss = 0.0
 
         y_preds = []
-        
+
         with torch.no_grad():
             for x_sample, y_sample in dataloader:
                 x_sample, y_sample = x_sample.to(self.device), y_sample.to(self.device)
@@ -402,24 +447,31 @@ class MetaLearner(nn.Module):
             y_preds = [item for sublist in y_preds for item in sublist]
 
         return val_task_loss, y_preds
-    
+
 
     def plot_predictions(self,
                          test_dataloader,
                          names_weights_copy,
                          results_dir_name,
                          test_timeseries_code):
+        """
+        
+        """
 
         self.eval()
         _, y_preds = self.evaluate(dataloader=test_dataloader,
                                 weights=names_weights_copy,
                                 is_query_set=True)
         y_test = utils.get_task_test_set(test_dataloader)
-    
+
         utils.plot_predictions(y_test, y_preds, results_dir_name, test_timeseries_code)
-        
+
 
     def meta_test(self, data_filenames, optimal_mode, results_dir_name=None):
+        """
+        
+        """
+
         # Create dataloader for the test tasks
         test_tasks_dataloader = data_setup.build_tasks_set(data_filenames,
                                                            self.data_config,
@@ -455,7 +507,7 @@ class MetaLearner(nn.Module):
                 self.network.reset_states()
 
                 # Net forward on support set
-                inner_epoch_support_loss = self.inner_loop_forward(
+                inner_epoch_support_loss = self.forward(
                     dataloader=train_dataloader,
                     weights=names_weights_copy,
                     is_query_set=False
@@ -463,7 +515,9 @@ class MetaLearner(nn.Module):
 
                 if optimal_mode:
                     with torch.no_grad():
-                        support_set_losses.append(inner_epoch_support_loss.item()/len(train_dataloader))
+                        support_set_losses.append(
+                            inner_epoch_support_loss.item()/len(train_dataloader)
+                            )
 
                 # Apply inner loop update
                 names_weights_copy = self.inner_loop_update(
@@ -482,7 +536,9 @@ class MetaLearner(nn.Module):
 
                 if optimal_mode:
                     with torch.no_grad():
-                        query_set_losses.append(inner_epoch_query_loss.item()/len(test_dataloader))
+                        query_set_losses.append(
+                            inner_epoch_query_loss.item()/len(test_dataloader)
+                            )
                 else:
                     val_task_losses.append(inner_epoch_query_loss)
 
@@ -508,5 +564,9 @@ class MetaLearner(nn.Module):
 
 
 def build_meta_learner(args, data_config):
+    """
+    
+    """
+
     meta_learner = MetaLearner(args=args, data_config=data_config)
     return meta_learner

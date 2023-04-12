@@ -1,3 +1,7 @@
+"""
+
+"""
+
 import os
 import random
 
@@ -7,6 +11,10 @@ import torch
 
 
 def set_cuda_reproducibility():
+    """
+    
+    """
+
     if torch.cuda.is_available():
         if torch.version.cuda == "10.1":
             os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -15,6 +23,10 @@ def set_cuda_reproducibility():
 
 
 def set_random_seeds(seed):
+    """
+    
+    """
+
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     random.seed(seed)
@@ -34,6 +46,9 @@ def set_device():
 
 
 def set_model_args(config):
+    """
+    
+    """
 
     args = {
         'train_epochs': config['train_epochs'],
@@ -132,6 +147,10 @@ def plot_learning_curve(train_losses, test_losses, results_dir_name, timeseries_
 
 
 def plot_meta_train_losses(support_losses, query_losses, results_dir_name):
+    """
+    
+    """
+
     target_file = results_dir_name + 'optimal_train_losses.png'
 
     plt.figure()

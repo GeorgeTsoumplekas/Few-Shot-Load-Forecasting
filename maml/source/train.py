@@ -1,3 +1,7 @@
+"""
+
+"""
+
 #!/usr/bin/env python3
 
 import argparse
@@ -8,7 +12,6 @@ import yaml
 from matplotlib import pyplot as plt
 import optuna
 from sklearn.model_selection import KFold
-import torch
 
 import engine
 from utils import plot_meta_train_losses, set_random_seeds, set_cuda_reproducibility, \
@@ -20,6 +23,9 @@ warnings.filterwarnings("ignore")
 
 
 def objective(trial, ht_config, data_config, data_filenames):
+    """
+    
+    """
 
     # Hyperparameter search space
     config = {
@@ -67,7 +73,7 @@ def objective(trial, ht_config, data_config, data_filenames):
         # print(f"Fold {fold+1}/{k_folds}\n")
         meta_learner = engine.build_meta_learner(args=args,
                                                  data_config=data_config)
-        
+
         # Tasks used for training within this fold
         train_filenames = [data_filenames[idx] for idx in train_idx]
 
@@ -96,13 +102,16 @@ def objective(trial, ht_config, data_config, data_filenames):
 
 
 def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, data_filenames):
+    """
+    
+    """
 
     # Hyperparameter tuning process
     study = optuna.create_study(sampler=optuna.samplers.TPESampler(),
                                 direction='minimize')
     study.optimize(lambda trial: objective(trial, ht_config, data_config, data_filenames),
                    n_trials=n_trials)
-    
+
     # Create visializations regarding the hyperparameter tuning process
     optuna.visualization.matplotlib.plot_parallel_coordinate(study)
     target_file = results_dir_name + 'parallel_coordinates.png'
@@ -148,6 +157,9 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
 
 
 def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name):
+    """
+    
+    """
 
     args = set_model_args(opt_config)
 
@@ -169,6 +181,9 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
 
 
 def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_name):
+    """
+    
+    """
 
     args = set_model_args(opt_config)
 
@@ -185,6 +200,10 @@ def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_n
 
 
 def main():
+    """
+    
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_dir', dest='train_dir')
     parser.add_argument('--test_dir', dest='test_dir')

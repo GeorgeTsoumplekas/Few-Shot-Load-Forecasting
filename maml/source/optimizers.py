@@ -1,5 +1,9 @@
+"""
+
+"""
+
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class GradientDescentLearningRule(nn.Module):
@@ -24,6 +28,7 @@ class GradientDescentLearningRule(nn.Module):
                 the learning dynamic will be unstable and may diverge, while
                 if set too small learning will proceed very slowly.
         """
+
         super(GradientDescentLearningRule, self).__init__()
         assert learning_rate > 0., 'learning_rate should be positive.'
         self.learning_rate = torch.ones(1) * learning_rate
@@ -39,11 +44,16 @@ class GradientDescentLearningRule(nn.Module):
                 with respect to each of the parameters passed to `initialise`
                 previously, with this list expected to be in the same order.
         """
+
         return {
             key: names_weights_dict[key]
             - self.learning_rate * names_grads_wrt_params_dict[key]
             for key in names_weights_dict.keys()
         }
+
+    def forward(self):
+        """"""
+        return
 
 
 class LSLRGradientDescentLearningRule(nn.Module):
@@ -83,17 +93,30 @@ class LSLRGradientDescentLearningRule(nn.Module):
         self.init_learning_rate.to(device)
         self.total_num_inner_loop_steps = total_num_inner_loop_steps
         self.use_learnable_learning_rates = use_learnable_learning_rates
+        self.names_learning_rates_dict = nn.ParameterDict()
 
 
     def initialise(self, names_weights_dict):
-        self.names_learning_rates_dict = nn.ParameterDict()
+        """
+        
+        """
+
         for key, _ in names_weights_dict.items():
             self.names_learning_rates_dict[key.replace(".", "-")] = nn.Parameter(
                 data=torch.ones(self.total_num_inner_loop_steps + 1) * self.init_learning_rate,
                 requires_grad=self.use_learnable_learning_rates)
- 
+
+
+    def forward(self):
+        """"""
+        return
+
 
     def get_learned_lr(self, inner_loop_lr_dict):
+        """
+        
+        """
+
         for name, param in inner_loop_lr_dict.items():
             self.names_learning_rates_dict[name] = param
 
@@ -117,6 +140,10 @@ class LSLRGradientDescentLearningRule(nn.Module):
 
 
 def build_GD_optimizer(device, learning_rate):
+    """
+    
+    """
+
     optimizer = GradientDescentLearningRule(device, learning_rate)
     return optimizer
 
@@ -125,6 +152,9 @@ def build_LSLR_optimizer(device,
                          total_num_inner_loop_steps,
                          use_learnable_learning_rates,
                          init_learning_rate):
+    """
+    
+    """
 
     optimizer = LSLRGradientDescentLearningRule(device,
                                                 total_num_inner_loop_steps,
@@ -134,14 +164,22 @@ def build_LSLR_optimizer(device,
 
 
 def build_meta_optimizer(params, learning_rate):
+    """
+    
+    """
+
     optimizer = torch.optim.Adam(params=params,
                                  lr=learning_rate,
                                  amsgrad=False)
     return optimizer
 
 
-def build_meta_scheduler(meta_optimizer, T_max, eta_min):
+def build_meta_scheduler(meta_optimizer, num_epochs, eta_min):
+    """
+    
+    """
+
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=meta_optimizer,
-                                                           T_max=T_max,
+                                                           T_max=num_epochs,
                                                            eta_min=eta_min)
     return scheduler
