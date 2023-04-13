@@ -52,6 +52,8 @@ def set_model_args(config):
     Args:
         config: A dictionary that contains the configuration of the whole pipeline, part of
             are the parameters of the Meta-Learning model.
+    Returns:
+        A dictionary that contains all configurations to be passed to the meta-learner.
     """
 
     args = {

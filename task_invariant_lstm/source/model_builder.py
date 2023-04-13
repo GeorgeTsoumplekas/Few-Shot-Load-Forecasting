@@ -26,7 +26,7 @@ class LSTMModel(nn.Module):
         linear: A default torch nn.Linear layer.
         h_n: A torch.Tensor that represents the LSTM's hidden state.
         c_n: A torch.Tensor that represents the LSTM's cell state.
-        device: A string that defines the device on which the model should loaded onto.
+        device: A string that defines the device on which the model should be loaded onto.
     """
 
     def __init__(self, input_shape, output_shape, hidden_units, device):

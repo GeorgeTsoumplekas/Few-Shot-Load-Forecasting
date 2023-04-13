@@ -1,5 +1,17 @@
-"""
+"""Pipeline for training and evaluating a MAML LSTM Meta-Learner.
 
+At first, the time series used for training and testing are defined based on the given
+directories. Then a hyperparameter optimization is performed using cross-validation
+on the tasks of the meta-train set. After the optimal hyperparameters have been determined,
+a model is trained based on these. Then, for each task in the meta-test set, the
+model with the optimal initial parameters and learning rates is loaded and trained on the support
+set before being evaluated on the query set. Finaly, the optimal models as well as the corresponding
+learning curves and other plots relative to its hyperparameter tuning are saved.
+
+Typical usage example:
+python3 train.py --train_dir "path/to/train_dir" \
+                 --test_dir "path/to/train_dir" \
+                 --config "path/to/config.yaml"
 """
 
 #!/usr/bin/env python3
@@ -23,8 +35,21 @@ warnings.filterwarnings("ignore")
 
 
 def objective(trial, ht_config, data_config, data_filenames):
-    """
-    
+    """Training process of the hyperparameter tuning process.
+
+    Firstly, the cross-validation schema is defined. Based on that, the model is trained for
+    a specific set of hyperparameter values and the mean query set loss of the meta-validation
+    tasks, which is the objective value to be minimized, is calcualted.
+
+    Args:
+        trial: An optuna trial object, handled solely by optuna.
+        ht_config: A dictionary that defines the hyperparameter search space.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the training tasks.
+    Returns:
+        A float that represents the mean query set loss of the meta-validation
+        tasks.
     """
 
     # Hyperparameter search space
@@ -102,8 +127,21 @@ def objective(trial, ht_config, data_config, data_filenames):
 
 
 def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, data_filenames):
-    """
-    
+    """Perform hyperparameter tuning of the model on the given search space.
+
+    This is done using the optuna library. Additionally to defining the best hyperparameters,
+    a number of plots is created and saved that gives additional insights on the process.
+
+    Args:
+        n_trials: An integer that defines the total number of hyperparameter values' combinations
+            to be tried out.
+        results_dir_name: A string with the name of the directory the results will be saved.
+        ht_config: A dictionary that defines the hyperparameter search space.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the training tasks.
+    Returns:
+        A dictionary that contains the optimal hyperparameter values.
     """
 
     # Hyperparameter tuning process
@@ -157,8 +195,18 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
 
 
 def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name):
-    """
-    
+    """Meta-Training process of the optimal model.
+
+    The model is trained based on the optimal hyperparameters determined from the previously
+    done hyperparameter tuning. The learning curve of the model during meta-training is plotted
+    and the optimal weights and parameters of the meta-trained model are saved.
+
+    Args:
+        opt_config: A dictionary that contains the optimal hyperparameter values.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the training tasks.
+        results_dir_name: A string with the name of the directory the results will be saved.
     """
 
     args = set_model_args(opt_config)
@@ -166,10 +214,12 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
     meta_learner = engine.build_meta_learner(args=args,
                                              data_config=data_config)
 
-    train_losses, epoch_mean_support_losses, epoch_mean_query_losses = meta_learner.meta_train(
+    # Meta-train model using the optimal hyperparameters
+    _, epoch_mean_support_losses, epoch_mean_query_losses = meta_learner.meta_train(
         data_filenames,
         optimal_mode=True)
 
+    # Plot learning curve during meta-training
     plot_meta_train_losses(epoch_mean_support_losses,
                            epoch_mean_query_losses,
                            results_dir_name)
@@ -177,12 +227,20 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
     # Save the weights that occur from meta-training the optimal model
     meta_learner.save_parameters(results_dir_name)
 
-    return train_losses
-
 
 def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_name):
-    """
-    
+    """Meta-evaluation process of the meta-learner within each task of the meta-test set.
+
+    The meta-learner is initialized using the optimal initial base model weights and learned
+    learning rates. Then it is evaluated on the query set of each test task after being trained
+    on the support set of the examined task and the corresponding learning curves are plotted.
+
+    Args:
+        opt_config: A dictionary that contains the optimal hyperparameters for the model.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the test tasks.
+        results_dir_name: A string with the name of the directory the results will be saved.
     """
 
     args = set_model_args(opt_config)
@@ -190,7 +248,7 @@ def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_n
     meta_learner = engine.build_meta_learner(args=args,
                                              data_config=data_config)
 
-    # Create initial weights (weights_names attribute)
+    # Create initial weights (weights_names attribute) learned during meta-training
     meta_learner.load_optimal_inner_loop_params(results_dir_name)
 
     # Meta-evaluation
@@ -200,8 +258,12 @@ def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_n
 
 
 def main():
-    """
-    
+    """End-to-end logic to run the whole experiment.
+
+    Initially, the given command line arguments are parsed and the training and test tasks as
+    well as the experiment's configuration are defined. Hyperparameter tuning is then performed
+    to determine the optimal hyperparameters. Based on these, the final model is trained for each
+    test task' support set and then evaluated on the corresponding query set.
     """
 
     parser = argparse.ArgumentParser()
@@ -230,19 +292,6 @@ def main():
             filename = root + file
             test_filenames.append(filename)
 
-    # opt_config = {
-    #     'task_batch_size': 1,
-    #     'sample_batch_size': 1,
-    #     'num_inner_steps': 2,
-    #     'eta_min': float(1e-6),
-    #     'train_epochs': 2,
-    #     'lstm_hidden_units': 16,
-    #     'init_learning_rate': 0.0016075883117690475,
-    #     'meta_learning_rate': 0.0005439505246783044,
-    #     'second_order': True,
-    #     'second_to_first_order_epoch': 1
-    # }
-
     # Create results directory
     results_dir_name = './maml/results/'
     if not os.path.exists(results_dir_name):
@@ -266,13 +315,11 @@ def main():
                                        data_config,
                                        train_filenames)
 
-    # print(f"Opt config: {opt_config}")
-
-    # Train optimal model and plot train loss
-    _ = meta_train_optimal(opt_config,
-                           data_config,
-                           train_filenames,
-                           results_dir_name)
+    # Meta-train optimal meta-learner
+    meta_train_optimal(opt_config,
+                       data_config,
+                       train_filenames,
+                       results_dir_name)
 
     # Load optimal meta-trained model and evaluate it on test tasks
     meta_evaluate_optimal(opt_config,

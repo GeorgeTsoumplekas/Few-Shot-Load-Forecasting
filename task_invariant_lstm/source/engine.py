@@ -1,7 +1,7 @@
 """Module that contains the low-level functions to train a model.
 
 Specifically, a method that creates the desired optimizer is defined here, as well a method
-that contains the training loop within an epoch, a method that contains the training loop for 
+that contains the training loop within an epoch, a method that contains the training loop for
 each step in an epoch and a method used for prediction of test data. These functions are defined
 in a separate module since they can be reused for the hyperparameter tuning process and the
 training and fine-tuning of the optimal model.
@@ -19,7 +19,7 @@ def build_optimizer(network, learning_rate):
         network: A custom LSTM model object to be trained.
         learning_rate: A float that defines the learning rate used by the Adam optimizer.
     Returns:
-        optimizer: A pytorch Adam optimizer object with the desired settings.
+        A pytorch Adam optimizer object with the desired settings.
     """
 
     optimizer = torch.optim.Adam(params=network.parameters(), lr=learning_rate)

@@ -1,11 +1,15 @@
-"""
+"""Module that contains the implentation of the meta-learner.
 
+This class typically serves as a wrapper that contains the low-level functions to train a MAML++
+meta-learner. A function to build the meta-learner is also defined. The class handles the
+appropriate copying and passing around of the inner and outer loop parameters as well as the
+meta-training and meta-evaluation of the model.
 """
 
 import numpy as np
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 import data_setup
 import model_builder
@@ -14,12 +18,40 @@ import utils
 
 
 class MetaLearner(nn.Module):
-    """
-    
+    """Custom MAML(++) model that contains the base network and the parameters associated with
+        the meta-learner.
+
+    It's worth noticing that the internal parameters of this module are never used. On the contrary,
+    both inner loop and outer loop parameters are stored separately and used in functional calls
+    of the base model whenever necessary.
+
+    Attributes:
+        device: A string that defines the device on which the model should be loaded onto.
+        num_epochs: An integer which is the total number of training epochs.
+        task_batch_size:  An integer that is the number of tasks in each meta-batch.
+        sample_batch_size: An integer that is the number of subsequences in each batch.
+        lstm_hidden_units: An integer that defines the number of units in the LSTM layer.
+        init_learning_rate: A positive float with the initial value to scale gradient updates
+            to the parameters by.
+        meta_learning_rate: A positive float that is the learning rate of the meta-optimizer.
+        eta_min: A float that represents the minimum meta-learning rate.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        output_shape: An integer that defines the number of measurements in the predicted
+            subsequence.
+        num_inner_steps: An integer that is the total number of inner loop steps in each epoch.
+        multi_step_loss_num_epochs: 
+        second_order:
+        second_to_first_order_epoch:
+        network:
+        inner_loop_optimizer:
+        names_weights:
+        meta_optimizer:
+        meta_scheduler:
     """
 
     def __init__(self, args, data_config):
-        super(MetaLearner, self).__init__()
+        super().__init__()
 
         self.device = utils.set_device()
         self.num_epochs = args['train_epochs']
@@ -36,21 +68,24 @@ class MetaLearner(nn.Module):
         self.second_order = args['second_order']
         self.second_to_first_order_epoch = args['second_to_first_order_epoch']
 
+        # Base model
         self.network = model_builder.build_network(input_shape=1,
                                                    output_shape=self.output_shape,
                                                    hidden_units=self.lstm_hidden_units,
-                                                   device=self.device,
-                                                   meta_classifier=True)
+                                                   device=self.device)
 
-        self.inner_loop_optimizer = optimizers.build_LSLR_optimizer(self.device,
-                                                               self.num_inner_steps,
-                                                               True,
-                                                               self.init_learning_rate)
+        self.inner_loop_optimizer = optimizers.build_LSLR_optimizer(
+            self.device,
+            self.num_inner_steps,
+            True,
+            self.init_learning_rate)
 
         # Keeps the true weights of the base model (not the copied ones used during the inner
         # loop optimization)
         self.names_weights = self.get_inner_loop_params(state_dict=self.network.state_dict(),
                                                         is_copy=False)
+
+        # Create the learnable learning rate of the inner loop optimizer
         self.inner_loop_optimizer.initialise(self.names_weights)
 
         self.to(self.device)
@@ -59,35 +94,12 @@ class MetaLearner(nn.Module):
             params=self.trainable_parameters(),
             learning_rate=self.meta_learning_rate
             )
+
         self.meta_scheduler = optimizers.build_meta_scheduler(
             meta_optimizer=self.meta_optimizer,
             num_epochs=self.num_epochs,
             eta_min=self.eta_min
             )
-
-
-    def get_per_step_loss_importance(self, epoch):
-        """
-        
-        """
-
-        # Initially uniform weights
-        loss_weights = (1.0 / self.num_inner_steps) * np.ones(shape=(self.num_inner_steps))
-        decay_rate = 1.0 / self.num_inner_steps / self.multi_step_loss_num_epochs
-        min_value_for_non_final_losses = 0.03 / self.num_inner_steps # TODO: check constant
-
-        for i in range(len(loss_weights)-1):
-            curr_value = np.maximum(
-                loss_weights[i] - (epoch * decay_rate),
-                min_value_for_non_final_losses)
-            loss_weights[i] = curr_value
-
-        curr_value = np.minimum(
-            loss_weights[-1] + (epoch * (self.num_inner_steps - 1) * decay_rate),
-            1.0 - ((self.num_inner_steps - 1) * min_value_for_non_final_losses))
-        loss_weights[-1] = curr_value
-        loss_weights = torch.Tensor(loss_weights).to(device=self.device)
-        return loss_weights
 
 
     def get_inner_loop_params(self, state_dict, is_copy):
@@ -184,6 +196,78 @@ class MetaLearner(nn.Module):
         torch.save(obj=self.state_dict(), f=target_file)
 
 
+    def get_across_task_loss_metrics(self, total_losses):
+        """
+        
+        """
+
+        losses = {'loss': torch.mean(torch.stack(total_losses))}
+
+        return losses
+
+
+    def build_summary_dict(self, epoch_losses, phase, train_losses=None):
+        """
+        Builds/Updates a summary dict directly from the metric dict of the current iteration.
+        :param total_losses: Current dict with total losses (not aggregations) from experiment
+        :param phase: Current training phase
+        :param summary_losses: Current summarised (aggregated/summarised) losses stats means,
+        stdv etc.
+        :return: A new summary dict with the updated summary statistics information.
+        """
+
+        if train_losses is None:
+            train_losses = {}
+
+        for key in epoch_losses:
+            train_losses[f"{phase}_{key}_mean"] = np.mean(epoch_losses[key])
+            train_losses[f"{phase}_{key}_std"] = np.std(epoch_losses[key])
+
+        return train_losses
+
+
+    def plot_predictions(self,
+                         test_dataloader,
+                         names_weights_copy,
+                         results_dir_name,
+                         test_timeseries_code):
+        """
+        
+        """
+
+        self.eval()
+        _, y_preds = self.evaluate(dataloader=test_dataloader,
+                                weights=names_weights_copy,
+                                is_query_set=True)
+        y_test = utils.get_task_test_set(test_dataloader)
+
+        utils.plot_predictions(y_test, y_preds, results_dir_name, test_timeseries_code)
+
+
+    def get_per_step_loss_importance(self, epoch):
+        """
+        
+        """
+
+        # Initially uniform weights
+        loss_weights = (1.0 / self.num_inner_steps) * np.ones(shape=(self.num_inner_steps))
+        decay_rate = 1.0 / self.num_inner_steps / self.multi_step_loss_num_epochs
+        min_value_for_non_final_losses = 0.03 / self.num_inner_steps # TODO: check constant
+
+        for i in range(len(loss_weights)-1):
+            curr_value = np.maximum(
+                loss_weights[i] - (epoch * decay_rate),
+                min_value_for_non_final_losses)
+            loss_weights[i] = curr_value
+
+        curr_value = np.minimum(
+            loss_weights[-1] + (epoch * (self.num_inner_steps - 1) * decay_rate),
+            1.0 - ((self.num_inner_steps - 1) * min_value_for_non_final_losses))
+        loss_weights[-1] = curr_value
+        loss_weights = torch.Tensor(loss_weights).to(device=self.device)
+        return loss_weights
+
+
     # inner loop forward
     def forward(self, dataloader, weights, is_query_set):
         """
@@ -211,7 +295,7 @@ class MetaLearner(nn.Module):
                           use_second_order,
                           inner_epoch):
         """
-        Applies an inner loop update given current step's loss, the weights to update, 
+        Applies an inner loop update given current step's loss, the weights to update,
         a flag indicating whether to use second order derivatives and the current step's index.
         :param loss: Current step's loss with respect to the support set.
         :param names_weights_copy: A dictionary with names to parameters to update.
@@ -255,36 +339,6 @@ class MetaLearner(nn.Module):
         self.meta_optimizer.step()
 
 
-    def get_across_task_loss_metrics(self, total_losses):
-        """
-        
-        """
-
-        losses = {'loss': torch.mean(torch.stack(total_losses))}
-
-        return losses
-
-
-    def build_summary_dict(self, epoch_losses, phase, train_losses=None):
-        """
-        Builds/Updates a summary dict directly from the metric dict of the current iteration.
-        :param total_losses: Current dict with total losses (not aggregations) from experiment
-        :param phase: Current training phase
-        :param summary_losses: Current summarised (aggregated/summarised) losses stats means,
-        stdv etc.
-        :return: A new summary dict with the updated summary statistics information.
-        """
-
-        if train_losses is None:
-            train_losses = {}
-
-        for key in epoch_losses:
-            train_losses[f"{phase}_{key}_mean"] = np.mean(epoch_losses[key])
-            train_losses[f"{phase}_{key}_std"] = np.std(epoch_losses[key])
-
-        return train_losses
-
-
     def meta_train(self, data_filenames, optimal_mode):
         """
         
@@ -293,7 +347,7 @@ class MetaLearner(nn.Module):
         # print("Meta-Train started.\n")
 
         # Create dataloader for the training tasks
-        train_tasks_dataloader = data_setup.build_tasks_set(data_filenames, 
+        train_tasks_dataloader = data_setup.build_tasks_set(data_filenames,
                                                             self.data_config,
                                                             self.task_batch_size)
 
@@ -335,7 +389,7 @@ class MetaLearner(nn.Module):
 
                 task_query_losses = []
 
-                # Get a copy of the inner loop parameters 
+                # Get a copy of the inner loop parameters
                 names_weights_copy = self.get_inner_loop_params(state_dict=self.names_weights,
                                                                 is_copy=True)
 
@@ -391,7 +445,7 @@ class MetaLearner(nn.Module):
                 total_losses.append(task_query_losses)
 
             # print(f"\nTotal losses: {total_losses}")
-            
+
             if optimal_mode:
                 epoch_mean_support_losses.append(np.mean(tasks_mean_support_losses))
                 epoch_mean_query_losses.append(np.mean(tasks_mean_query_losses))
@@ -449,24 +503,6 @@ class MetaLearner(nn.Module):
         return val_task_loss, y_preds
 
 
-    def plot_predictions(self,
-                         test_dataloader,
-                         names_weights_copy,
-                         results_dir_name,
-                         test_timeseries_code):
-        """
-        
-        """
-
-        self.eval()
-        _, y_preds = self.evaluate(dataloader=test_dataloader,
-                                weights=names_weights_copy,
-                                is_query_set=True)
-        y_test = utils.get_task_test_set(test_dataloader)
-
-        utils.plot_predictions(y_test, y_preds, results_dir_name, test_timeseries_code)
-
-
     def meta_test(self, data_filenames, optimal_mode, results_dir_name=None):
         """
         
@@ -494,7 +530,7 @@ class MetaLearner(nn.Module):
                     data_config=self.data_config
                     )
 
-            # Get a copy of the inner loop parameters 
+            # Get a copy of the inner loop parameters
             names_weights_copy = self.get_inner_loop_params(state_dict=self.names_weights,
                                                             is_copy=True)
 
@@ -564,8 +600,14 @@ class MetaLearner(nn.Module):
 
 
 def build_meta_learner(args, data_config):
-    """
-    
+    """Initialize the custom meta-learner network.
+
+    Args:
+        args: A dictionary that contains all configurations to be passed to the meta-learner.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+    Returns:
+        An initialized custom meta-learner network ready to be trained.
     """
 
     meta_learner = MetaLearner(args=args, data_config=data_config)
