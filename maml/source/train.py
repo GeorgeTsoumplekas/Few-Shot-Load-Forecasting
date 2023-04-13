@@ -330,3 +330,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# TODO: Test refactored code with all tasks
+# TODO: If everything executes ok remove print comments
