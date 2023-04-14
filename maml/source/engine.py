@@ -125,6 +125,7 @@ class MetaLearner(nn.Module):
         if is_copy:
             for name, param in state_dict.items():
                 names_weights[name] = param
+
         # But when first defined, they should be defined as parameters, to enable gradient
         # computations.
         else:
@@ -407,9 +408,7 @@ class MetaLearner(nn.Module):
         # Dictionary with weights and their corresponding gradients
         names_grads_copy = dict(zip(names_weights_copy.keys(), grads))
 
-        for key, grad in names_grads_copy.items():
-            if grad is None:
-                print('Grads not found for inner loop parameter', key)
+        for key, _ in names_grads_copy.items():
             names_grads_copy[key] = names_grads_copy[key].sum(dim=0)
 
         names_weights_copy = self.inner_loop_optimizer.update_params(
@@ -450,14 +449,10 @@ class MetaLearner(nn.Module):
             epoch and a corresponding one for the query sets.
         """
 
-        # print("Meta-Train started.\n")
-
         # Create dataloader for the training tasks
         train_tasks_dataloader = data_setup.build_tasks_set(data_filenames,
                                                             self.data_config,
                                                             self.task_batch_size)
-
-        # print("Created the task dataloaders.\n")
 
         # Metrics calculated only when meta-training the optimal model
         if optimal_mode:
@@ -469,7 +464,6 @@ class MetaLearner(nn.Module):
         # Meta-Train loop
         for epoch in range(self.num_epochs):
             epoch = int(epoch)
-            # print(f"\nEpoch {epoch+1} of {self.num_epochs}.")
 
             use_second_order = self.second_order and (epoch < self.second_to_first_order_epoch)
             total_losses = []
@@ -478,7 +472,6 @@ class MetaLearner(nn.Module):
 
             # Get per step importance vector
             per_step_loss_importance = self.get_per_step_loss_importance(epoch)
-            # print(f"Per step loss importances: {per_step_loss_importance}")
 
             # Additional metrics calculated only when meta-training the optimal model
             if optimal_mode:
@@ -487,7 +480,6 @@ class MetaLearner(nn.Module):
 
             # Iterate through every task in the train tasks set
             for train_task_data, _ in train_tasks_dataloader:
-                # print(f"\nTrain task {task_idx+1} / {len(train_tasks_dataloader)}\n")
 
                 # Create support and query sets dataloaders
                 train_dataloader, test_dataloader = data_setup.build_task(
@@ -504,7 +496,6 @@ class MetaLearner(nn.Module):
 
                 # Inner loop steps
                 for inner_epoch in range(self.num_inner_steps):
-                    # print(f"Inner epoch {inner_epoch+1} / {self.num_inner_steps}")
 
                     self.network.reset_states()
 
@@ -514,8 +505,6 @@ class MetaLearner(nn.Module):
                         weights=names_weights_copy,
                         is_query_set=False
                         )
-
-                    # print(f"Support set loss: {inner_epoch_support_loss}")
 
                     # Simple (no-multi step) loss used in learning curve plots
                     if optimal_mode and (inner_epoch == (self.num_inner_steps-1)):
@@ -540,8 +529,6 @@ class MetaLearner(nn.Module):
                         is_query_set=True
                     )
 
-                    # print(f"Query set loss: {inner_epoch_query_loss}\n")
-
                     # Simple (no-multi step) loss used in learning curve plots
                     if optimal_mode and (inner_epoch == (self.num_inner_steps-1)):
                         with torch.no_grad():
@@ -555,10 +542,7 @@ class MetaLearner(nn.Module):
 
                 # Accumulate losses from all training tasks on their query sets
                 task_query_losses = torch.sum(torch.stack(task_query_losses))
-                # print(f"Task query set losses: {task_query_losses}")
                 total_losses.append(task_query_losses)
-
-            # print(f"\nTotal losses: {total_losses}")
 
             if optimal_mode:
                 epoch_mean_support_losses.append(np.mean(tasks_mean_support_losses))
@@ -570,8 +554,6 @@ class MetaLearner(nn.Module):
             # Meta update
             self.meta_update(loss=losses['loss'])
 
-            # print(f"\nLosses: {losses}")
-
             self.meta_scheduler.step()
 
             if optimal_mode:
@@ -580,8 +562,6 @@ class MetaLearner(nn.Module):
                         epoch_losses[key] = [float(value)]
                     else:
                         epoch_losses[key].append(float(value))
-
-                # print(f"\nEpoch losses: {epoch_losses}")
 
                 # Summary statistics
                 train_losses = self.build_summary_dict(epoch_losses=epoch_losses,

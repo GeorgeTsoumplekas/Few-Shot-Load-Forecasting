@@ -95,7 +95,6 @@ def objective(trial, ht_config, data_config, data_filenames):
     kfold = KFold(n_splits=k_folds, shuffle=True)
 
     for fold, (train_idx,val_idx) in enumerate(kfold.split(data_filenames)):
-        # print(f"Fold {fold+1}/{k_folds}\n")
         meta_learner = engine.build_meta_learner(args=args,
                                                  data_config=data_config)
 
@@ -106,15 +105,11 @@ def objective(trial, ht_config, data_config, data_filenames):
         val_filenames = [data_filenames[idx] for idx in val_idx]
 
         # Meta-Train
-        # print("Meta-Training started..")
         meta_learner.meta_train(train_filenames, optimal_mode=False)
-        # print("Meta-Training finshed.\n")
 
         # Meta-Evaluation
-        # print("Meta-Validation started..")
         mean_fold_val_loss = meta_learner.meta_test(data_filenames=val_filenames,
                                                     optimal_mode=False)
-        # print("Meta-Validation finshed.\n")
 
         mean_fold_val_losses[fold] = mean_fold_val_loss
 
@@ -175,8 +170,6 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
 
     # The best trial is the one that minimizes the objective value (mean validation loss)
     best_trial = trials_df[trials_df.value == trials_df.value.min()]
-
-    # print(f"Best trial: {best_trial}")
 
     opt_config = {
         'task_batch_size': ht_config['task_batch_size'],
@@ -330,7 +323,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# TODO: Test refactored code with all tasks
-# TODO: If everything executes ok remove print comments
