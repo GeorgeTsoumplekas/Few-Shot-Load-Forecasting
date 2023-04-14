@@ -310,13 +310,28 @@ class MetaLearner(nn.Module):
 
 
     def get_per_step_loss_importance(self, epoch):
-        """
-        TODO
+        """Calculate importance coefficients of the multi step loss for each epoch.
+
+        At first, the coefficients are the same for all inner loop steps. As epochs proceed,
+        the coefficinets of all but the last inner loop step decrease based on a specified decay
+        rate. Meanwhile the coefficient of the last step increases in such a way that the sum of
+        all coefficients for a specific epoch equal one.
+
+        Args:
+            epoch: An integer that is the index of the current epoch.
+        Returns:
+            A torch tensor with the calculated coefficients.
         """
 
         # Initially uniform weights
         loss_weights = (1.0 / self.num_inner_steps) * np.ones(shape=(self.num_inner_steps))
+
+        # Coefficient by which the learning rate decays in each step
+        # Depends on the number of inner loop steps times the number of epochs taken into
+        # consideration when calculating the multi step loss
         decay_rate = 1.0 / self.num_inner_steps / self.multi_step_loss_num_epochs
+
+        # Determine a minimum inner loop learning rate
         min_value_for_non_final_losses = 0.03 / self.num_inner_steps # TODO: check constant
 
         for i in range(len(loss_weights)-1):
@@ -325,6 +340,7 @@ class MetaLearner(nn.Module):
                 min_value_for_non_final_losses)
             loss_weights[i] = curr_value
 
+        # As epochs proceed, more and more weight is given towards the last step of the inner loop
         curr_value = np.minimum(
             loss_weights[-1] + (epoch * (self.num_inner_steps - 1) * decay_rate),
             1.0 - ((self.num_inner_steps - 1) * min_value_for_non_final_losses))
@@ -333,7 +349,6 @@ class MetaLearner(nn.Module):
         return loss_weights
 
 
-    # inner loop forward
     def forward(self, dataloader, weights, is_query_set):
         """The training loop of the model for a specific task in an inner-loop step.
 
@@ -418,8 +433,21 @@ class MetaLearner(nn.Module):
 
 
     def meta_train(self, data_filenames, optimal_mode):
-        """
-        
+        """Meta-training process of the meta-learner.
+
+        The process is generalized in such a way that can be used for both meta-training during
+        hyperparameter tuning and meta-training of the optimal model. The only difference is in
+        the metrics being calculated in each case.
+
+        Args:
+            data_filenames: A list of strings that contains the paths to the train tasks.
+            optimal_mode: A boolean flag that defines if the meta-training process is performed
+                during hyperparameter-tuning or is that of the optimal model.
+        Returns:
+            If the meta-training is that of the optimal model (optimal_mode is True) then a
+            dictionary with summary statistics is returned, as well as two lists, one that
+            contains the mean loss for all support sets seen during the last inner loop step in each
+            epoch and a corresponding one for the query sets.
         """
 
         # print("Meta-Train started.\n")
@@ -565,8 +593,19 @@ class MetaLearner(nn.Module):
 
 
     def evaluate(self, dataloader, weights, is_query_set=True):
-        """
-        
+        """Evaluate the model on the query set of a specific task.
+
+        The model makes predictions for all samples of the validation/test set and then the loss
+        is calculated based on the provided loss function.
+
+        Args:
+            dataloader: A torch DataLoader object that contains the examined set.
+            weights: A dictionary that contains the state dict of the base model.
+            is_query_set: A boolean that defines whether the given input sample belongs to the
+                query set of the task.
+        Returns:
+            A float that represents the model loss on the given set and a list that contains
+            the predicted values for the given set.
         """
 
         self.network.eval()
@@ -591,8 +630,22 @@ class MetaLearner(nn.Module):
 
 
     def meta_test(self, data_filenames, optimal_mode, results_dir_name=None):
-        """
-        
+        """Meta-testing process of the meta-learner.
+
+        The process is generalized in such a way that can be used for both meta-evaluation during
+        hyperparameter tuning and meta-testing of the optimal model. The only difference is in
+        the metrics being calculated in each case.
+
+        Args:
+            data_filenames: A list of strings that contains the paths to the test tasks.
+            optimal_mode: A boolean flag that defines if the meta-testing process is performed
+                during hyperparameter-tuning or is that of the optimal model.
+            results_dir_name: A string with the name of the directory the results will be saved.
+                This is used only during meta-testing of the optimal model (optimal_mode is True).
+        Returns:
+            If the meta-testing is during hyperparameter tuning (optimal_mode is False) then a
+            float that represents the mean loss of the query set of each task used for validation
+            (the objective of the hyperparameter tuning process) is returned.
         """
 
         # Create dataloader for the test tasks
@@ -682,6 +735,7 @@ class MetaLearner(nn.Module):
                 # Save optimal fine-tuned model
                 target_dir_name = results_dir_name + test_timeseries_code[0] + '/'
                 self.save_parameters(target_dir_name)
+
             else:
                 mean_fold_val_loss = torch.mean(torch.stack(val_task_losses))
                 return mean_fold_val_loss

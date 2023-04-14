@@ -120,7 +120,8 @@ def evaluate(network, val_dataloader, loss_fn, device):
              will be done.
         device: A string that defines the device on which calculations should take place.
     Returns:
-        A float that represents the model loss on the given set.
+        A float that represents the model loss on the given set and a list that contains
+        the predicted values for the given set.
     """
 
     network.eval()
