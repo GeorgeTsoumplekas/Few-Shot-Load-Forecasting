@@ -96,6 +96,7 @@ def objective(trial, ht_config, data_config, data_filenames):
 
         # Tasks used for training within this fold
         train_filenames = [data_filenames[idx] for idx in train_idx]
+
         # Tasks used for validation within this fold
         val_filenames = [data_filenames[idx] for idx in val_idx]
 

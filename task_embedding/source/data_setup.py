@@ -66,7 +66,7 @@ class TaskSpecificDataset(Dataset):
     """
 
     def __init__(self, x_data, y_data):
-        """Init MyDataset with input features and corresponding outputs."""
+        """Init TaskSpecificDataset with input features and corresponding outputs."""
 
         self.x_data = x_data
         self.y_data = y_data
@@ -342,9 +342,12 @@ def split_task(task_data, data_config):
 
 
 def get_full_train_set(train_dataloader):
+    """
+    
+    """
 
     train_data = torch.Tensor([])
-    for x_sample, y_sample in train_dataloader:
+    for x_sample, _ in train_dataloader:
         train_data = torch.cat([train_data, x_sample])
     
     return train_data

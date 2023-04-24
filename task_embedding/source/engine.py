@@ -9,19 +9,17 @@ def build_optimizer(network, learning_rate):
     return optimizer
 
 
-def model_step(network, train_dataloader, device):
-
-    network.train()
-    train_step_loss = 0.0
+def model_step(network, dataloader, device):
 
     # Reset encoder states
     network.encoder_reset_states()
 
-    for x_sample in train_dataloader:
+    for x_sample in dataloader:
         x_sample = x_sample.to(device)
         enc_output, h_n, c_n = network.encoder_forward(x_sample)
 
-        # Test to see which one is better and then move it inside the encoder's forward method
+        # TODO: Test which one is better and then move it inside the encoder's
+        # forward method
         enc_output = enc_output[-1].unsqueeze(dim=0)
         # enc_output = torch.unsqueeze(torch.mean(enc_output, axis=0), dim=0)
 
@@ -34,7 +32,7 @@ def model_step(network, train_dataloader, device):
     # Contains the decoder output for all subsequences
     dec_output = torch.Tensor([], device=device)
 
-    for _ in train_dataloader:
+    for _ in dataloader:
         dec_input = network.decoder_forward(dec_input)
         dec_output = torch.cat([dec_input, dec_output], dim=0)
 
@@ -51,6 +49,7 @@ def train_epoch(
     data_config,
     ):
 
+    network.train()
     total_epoch_loss = 0.0
 
     # For each training task - load the task and train the model on it
@@ -73,9 +72,13 @@ def train_epoch(
     return total_epoch_loss
 
 
-# def evaluate(network, val_dataloader, loss_fn, device):
-#     network.eval()
-#     val_loss = 0.0
+def evaluate(network, val_dataloader, loss_fn, device):
 
-#     with torch.no_grad():
-#         for x_sample, y_sample in val_dataloader:
+    network.eval()
+    with torch.no_grad():
+        dec_output = model_step(network, val_dataloader, device)
+        true_output = data_setup.get_full_train_set(val_dataloader)
+
+        val_task_loss = loss_fn(dec_output, true_output).item()
+
+    return val_task_loss
