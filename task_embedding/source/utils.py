@@ -39,4 +39,39 @@ def set_device():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     return device
 
+
+def save_model(network_state_dict, results_dir_name):
+
+    target_file = results_dir_name + 'optimal_trained_model.pth'
+    torch.save(obj=network_state_dict, f=target_file)
+
+
+def plot_learning_curve(train_losses, test_losses, results_dir_name):
+
+    plt.figure()
+    plt.plot(train_losses, c='b', label='Train Loss')
+    plt.plot(test_losses, c='r', label='Test Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('MSE')
+    plt.title('Learning curve of optimal model')
+    plt.legend()
+
+    target_file = results_dir_name + 'learning_curve.png'
+    plt.savefig(target_file)
+
+
+def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
+    
+    plt.figure()
+    plt.plot(y_true, 'b', label='True')
+    plt.plot(y_pred, 'r', label='Predicted')
+    plt.xlabel('Timestep')
+    plt.ylabel('Normalized Load')
+    plt.title('Model predictions vs true values on test set')
+    plt.legend()
+
+    target_file = results_dir_name + timeseries_code[0] + '_reconstruction.png'
+    plt.savefig(target_file)
+
+
 # TODO: Create set_cuda_reproducibility function for the baselines too

@@ -1,10 +1,12 @@
 import argparse
+import json
 import os
 import yaml
 
 from matplotlib import pyplot as plt
 import optuna
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
+import torch
 from torch import nn
 
 from data_setup import build_tasks_set, build_task
@@ -20,7 +22,6 @@ def objective(trial, ht_config, data_config, data_filenames):
         'kfolds': ht_config['k_folds'],
         'task_batch_size': ht_config['task_batch_size'],
         'sample_batch_size': ht_config['sample_batch_size'],
-        'seed': ht_config['seed'],
         'train_epochs': ht_config['train_epochs'],
         'learning_rate': trial.suggest_float('learning_rate',
                                              float(ht_config['learning_rate']['lower_bound']),
@@ -39,7 +40,7 @@ def objective(trial, ht_config, data_config, data_filenames):
     num_epochs = config['train_epochs']
     task_batch_size = config['task_batch_size']
     sample_batch_size = config['sample_batch_size']
-    output_shape = data_config['pred_days']*data_config['day_measurements']
+    output_shape = data_config['week_num']*7*data_config['day_measurements']
     lstm_hidden_units = round(config['embedding_ratio']*output_shape)
     learning_rate = config['learning_rate']
 
@@ -48,6 +49,7 @@ def objective(trial, ht_config, data_config, data_filenames):
     kfold = KFold(n_splits=k_folds, shuffle=True)
 
     for fold, (train_idx,val_idx) in enumerate(kfold.split(data_filenames)):
+        print(f"Fold {fold+1}|{k_folds}")
         
         # Tasks used for training within this fold
         train_filenames = [data_filenames[idx] for idx in train_idx]
@@ -66,6 +68,8 @@ def objective(trial, ht_config, data_config, data_filenames):
         optimizer = engine.build_optimizer(network, learning_rate)
         loss_fn = nn.MSELoss()
 
+        print("Training...")
+
         # Train model using the train tasks
         for _ in range(num_epochs):
             # train_epoch function
@@ -77,20 +81,19 @@ def objective(trial, ht_config, data_config, data_filenames):
                                    sample_batch_size,
                                    data_config)
 
-        # Evaluation in each validation task  
-        val_loss = 0.0
-        for val_task_data, _ in val_tasks_dataloader:
-            val_dataloader, _ = build_task(val_task_data, sample_batch_size, data_config)
-
-            val_task_loss, _ = engine.evaluate(network,
-                                               val_dataloader,
-                                               loss_fn,
-                                               device)
-            val_loss += val_task_loss
+        print("Evaluating...")
 
         # Total validation loss for the specific fold
-        val_loss /= len(val_tasks_dataloader)
+        val_loss = engine.evaluate(network,
+                                   val_tasks_dataloader,
+                                   sample_batch_size,
+                                   data_config,
+                                   loss_fn,
+                                   device)
+
         mean_fold_val_losses[fold] = val_loss
+
+        print()
 
     val_loss_sum = 0.0
     for _, value in mean_fold_val_losses.items():
@@ -137,8 +140,10 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
     opt_config = {
         'task_batch_size': ht_config['task_batch_size'],
         'sample_batch_size': ht_config['sample_batch_size'],
-        'seed': ht_config['seed'],
         'train_epochs': ht_config['train_epochs'],
+        'max_epochs': ht_config['max_epochs'],
+        'patience': ht_config['patience'],
+        'min_delta': ht_config['min_delta'],
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'embedding_ratio': best_trial['params_embedding_ratio'].values[0]
     }
@@ -146,12 +151,148 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
     return opt_config
 
 
-def train_optimal():
-    pass
+def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
+
+    device = utils.set_device()
+    task_batch_size = opt_config['task_batch_size']
+    sample_batch_size = opt_config['sample_batch_size']
+    num_epochs = opt_config['max_epochs']
+    learning_rate = opt_config['learning_rate']
+    output_shape = data_config['week_num']*7*data_config['day_measurements']
+    lstm_hidden_units = round(opt_config['embedding_ratio']*output_shape)
+    patience =  opt_config['patience']
+    min_delta = opt_config['min_delta']
+
+    train_filenames, val_filenames = train_test_split(data_filenames,
+                                                      test_size=0.2,
+                                                      random_state=42)
+
+    train_tasks_dataloader = build_tasks_set(train_filenames,
+                                             data_config,
+                                             task_batch_size)
+
+    val_tasks_dataloader = build_tasks_set(val_filenames,
+                                           data_config,
+                                           task_batch_size)
+    
+    # Get the model, optimizer, early stopper and loss function
+    network = model_builder.build_network(input_shape=1,
+                                          output_shape=output_shape,
+                                          hidden_units=lstm_hidden_units,
+                                          device=device)
+    optimizer = engine.build_optimizer(network, learning_rate)
+    early_stopper = engine.build_early_stopper(network, patience, min_delta)
+    loss_fn = nn.MSELoss()
+
+    train_losses = []
+    val_losses = []
+
+    for epoch in range(num_epochs):
+        print(f"Epoch {epoch+1}|{num_epochs}")
+        # train_epoch
+        train_loss = engine.train_epoch(network,
+                                   train_tasks_dataloader,
+                                   loss_fn,
+                                   optimizer,
+                                   device,
+                                   sample_batch_size,
+                                   data_config)
+        train_losses.append(train_loss)
+
+        # evaluate epoch
+        val_loss = engine.evaluate(network,
+                                   val_tasks_dataloader,
+                                   sample_batch_size,
+                                   data_config,
+                                   loss_fn,
+                                   device)
+        val_losses.append(val_loss)
+
+        # check for early stop
+        if early_stopper.early_stop(val_loss, network):
+            print(f"Training stopped at epoch {epoch+1}.")
+            break
+
+    # Save best model
+    utils.save_model(network_state_dict=early_stopper.get_best_model(),
+                     results_dir_name=results_dir_name)
+
+    return train_losses, val_losses
 
 
-def evaluate_optimal():
-    pass
+def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
+
+    device = utils.set_device()
+    task_batch_size = opt_config['task_batch_size']
+    sample_batch_size = opt_config['sample_batch_size']
+    output_shape = data_config['week_num']*7*data_config['day_measurements']
+    lstm_hidden_units = round(opt_config['embedding_ratio']*output_shape)
+    model_save_path = results_dir_name + 'optimal_trained_model.pth'
+
+    test_tasks_dataloader = build_tasks_set(test_filenames,
+                                            data_config,
+                                            task_batch_size)
+    
+    # Load optimal model
+    network = model_builder.build_network(input_shape=1,
+                                          output_shape=output_shape,
+                                          hidden_units=lstm_hidden_units,
+                                          device=device)
+    network.load_state_dict(torch.load(f=model_save_path))
+
+    loss_fn = nn.MSELoss()
+
+    test_loss = 0.0
+    for test_task_data, test_timeseries_code in test_tasks_dataloader:
+        test_dataloader, _ = build_task(test_task_data, sample_batch_size, data_config)
+
+        test_task_loss, y_preds, y_true = engine.evaluate_task(network,
+                                                               test_dataloader,
+                                                               loss_fn,
+                                                               device)
+        test_loss += test_task_loss
+
+        # Create a pred plot for each test task
+        y_preds = torch.flatten(y_preds).tolist()
+        y_true = torch.flatten(y_true).tolist()
+        utils.plot_predictions(y_true, y_preds, results_dir_name, test_timeseries_code)
+
+    test_loss /= len(test_tasks_dataloader)
+    return test_loss
+
+
+def embed_task_set(opt_config, data_config, data_filenames, results_dir_name):
+
+    device = utils.set_device()
+    task_batch_size = opt_config['task_batch_size']
+    sample_batch_size = opt_config['sample_batch_size']
+    output_shape = data_config['week_num']*7*data_config['day_measurements']
+    lstm_hidden_units = round(opt_config['embedding_ratio']*output_shape)
+    model_save_path = results_dir_name + 'optimal_trained_model.pth'
+
+    all_embeddings = {}
+
+    # Load optimal model
+    network = model_builder.build_network(input_shape=1,
+                                          output_shape=output_shape,
+                                          hidden_units=lstm_hidden_units,
+                                          device=device)
+    network.load_state_dict(torch.load(f=model_save_path))
+
+    tasks_dataloader = build_tasks_set(data_filenames,
+                                       data_config,
+                                       task_batch_size)
+
+    for task_data, timeseries_code in tasks_dataloader:
+        train_dataloader, _ = build_task(task_data, sample_batch_size, data_config)
+    
+        # embed task function here
+        task_embedding = engine.embed_task(network, train_dataloader, device)
+
+        # add to dictionary
+        all_embeddings[timeseries_code[0]] = task_embedding.tolist()
+
+    return all_embeddings
 
 
 def main():
@@ -204,21 +345,49 @@ def main():
                                        ht_config,
                                        data_config,
                                        train_filenames)
+    
+    print(f"Optimal configuration: {opt_config}")
+
+    # opt_config = {'task_batch_size': 1,
+    #               'sample_batch_size': 1,
+    #               'train_epochs': 5,
+    #               'max_epochs': 1000,
+    #               'patience': 3,
+    #               'min_delta': 0.0,
+    #               'learning_rate': 0.0005363835608033376,
+    #               'embedding_ratio': 0.15}
 
     # Train optimal task-embedding model
-    train_optimal(opt_config,
-                       data_config,
-                       train_filenames,
-                       results_dir_name)
+    train_losses, val_losses = train_optimal(opt_config,
+                                             data_config,
+                                             train_filenames,
+                                             results_dir_name)
+    utils.plot_learning_curve(train_losses, val_losses, results_dir_name)
 
     # Load optimal task-embedding model and evaluate it on test tasks
-    evaluate_optimal(opt_config,
-                          data_config,
-                          test_filenames,
-                          results_dir_name)
+    test_loss = evaluate_optimal(opt_config,
+                     data_config,
+                     test_filenames,
+                     results_dir_name)
+    print(f"Test loss: {test_loss}")
+
+    # Get embeddings for both train and test tasks
+    train_tasks_embeddings = embed_task_set(opt_config,
+                                            data_config,
+                                            train_filenames,
+                                            results_dir_name)
+    target_file = train_dir[:-11] + 'embeddings.json'
+    with open(target_file, 'w', encoding='utf8') as outfile:
+        json.dump(train_tasks_embeddings, outfile)
+
+    test_tasks_embeddings = embed_task_set(opt_config,
+                                           data_config,
+                                           test_filenames,
+                                           results_dir_name)
+    target_file = test_dir[:-11] + 'embeddings.json'
+    with open(target_file, 'w', encoding='utf8') as outfile:
+        json.dump(test_tasks_embeddings, outfile)
 
 
 if __name__ == "__main__":
     main()
-
-# TODO: Test hyperparameter tuning before moving on

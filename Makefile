@@ -31,6 +31,9 @@ experiment_2: task_specific_lstm/config.yaml data/iONA_train_aggregated/* data/i
 MAML: maml/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/*
 	./maml/train_script
 
+embedding: task_embedding/config.yaml data/mini_iONA_train_aggregated/* data/mini_iONA_test_aggregated/*
+	./task_embedding/train_script
+
 .PHONY: clean
 clean:
 	find . | grep -E "(__pycache__|\.pyc|\.pyo$)" | xargs rm -rf
