@@ -105,5 +105,5 @@ class RAE(nn.Module):  # pylint: disable=abstract-method
 
 def build_network(input_shape, output_shape, hidden_units, device):
 
-    network = RAE(input_shape,output_shape, hidden_units, device)
+    network = RAE(input_shape,output_shape, hidden_units, device).to(device)
     return network

@@ -28,7 +28,7 @@ class EarlyStopper:
 
     def get_best_model(self):
         return self.best_model
-    
+
 
 def build_early_stopper(network, patience, min_delta):
     return EarlyStopper(network, patience, min_delta)
@@ -43,6 +43,7 @@ def model_step(network, dataloader, device):
     # Reset encoder states
     network.encoder_reset_states()
 
+    x_sample = None
     for x_sample, _ in dataloader:
         x_sample = x_sample.to(device)
         enc_output, h_n, c_n = network.encoder_forward(x_sample)
@@ -56,10 +57,10 @@ def model_step(network, dataloader, device):
     network.decoder_set_states(h_n, c_n)
 
     # Initial decoder input
-    dec_input = torch.zeros_like(x_sample)
+    dec_input = torch.zeros_like(x_sample).to(device)
 
     # Contains the decoder output for all subsequences
-    dec_output = torch.Tensor([], device=device)
+    dec_output = torch.tensor([], device=device)
 
     for _ in dataloader:
         dec_input = network.decoder_forward(dec_input)
@@ -88,7 +89,7 @@ def train_epoch(
                                                     data_config)
 
         dec_output = model_step(network, train_dataloader, device)
-        true_output = data_setup.get_full_train_set(train_dataloader)
+        true_output = data_setup.get_full_train_set(train_dataloader).to(device)
 
         loss = loss_fn(dec_output, true_output)
         total_epoch_loss += loss.item()
@@ -106,7 +107,7 @@ def evaluate_task(network, val_dataloader, loss_fn, device):
     network.eval()
     with torch.no_grad():
         dec_output = model_step(network, val_dataloader, device)
-        true_output = data_setup.get_full_train_set(val_dataloader)
+        true_output = data_setup.get_full_train_set(val_dataloader).to(device)
 
         val_task_loss = loss_fn(dec_output, true_output).item()
 
@@ -120,9 +121,9 @@ def evaluate(network, val_tasks_dataloader, sample_batch_size, data_config, loss
         val_dataloader, _ = data_setup.build_task(val_task_data, sample_batch_size, data_config)
 
         val_task_loss, _, _ = evaluate_task(network,
-                                      val_dataloader,
-                                      loss_fn,
-                                      device)
+                                            val_dataloader,
+                                            loss_fn,
+                                            device)
         val_loss += val_task_loss
 
     val_loss /= len(val_tasks_dataloader)
@@ -133,7 +134,7 @@ def evaluate(network, val_tasks_dataloader, sample_batch_size, data_config, loss
 def embed_task(network, dataloader, device):
 
     # Contains the encoder output for all subsequences
-    enc_outputs = torch.Tensor([], device=device)
+    enc_outputs = torch.tensor([], device=device)
 
     # Reset encoder states
     network.encoder_reset_states()
@@ -148,9 +149,5 @@ def embed_task(network, dataloader, device):
         # enc_output = torch.unsqueeze(torch.mean(enc_output, axis=0), dim=0)
 
         enc_outputs = torch.cat([enc_outputs, enc_output], dim=0)
-
-    print(len(dataloader))
-    print(enc_outputs.shape)
-    print(torch.mean(enc_outputs, dim=0).shape)
 
     return torch.mean(enc_outputs, dim=0)

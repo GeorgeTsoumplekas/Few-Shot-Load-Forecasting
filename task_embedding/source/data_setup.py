@@ -343,11 +343,11 @@ def split_task(task_data, data_config):
 
 def get_full_train_set(train_dataloader):
     """
-    
+
     """
 
     train_data = torch.Tensor([])
     for x_sample, _ in train_dataloader:
         train_data = torch.cat([train_data, x_sample])
-    
+
     return train_data

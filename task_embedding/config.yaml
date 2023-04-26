@@ -4,15 +4,16 @@
     week_num: 1
     pred_days: 1
     test_days: 7
- n_trials: 10
+ tsne_perplexity: 10.0
+ n_trials: 15
  seed: 42
  ht_config:
     k_folds: 3
     task_batch_size: 1
     sample_batch_size: 1
-    train_epochs: 20
+    train_epochs: 30
     max_epochs: 1000
-    patience: 3
+    patience: 5
     min_delta: 0.0
     learning_rate:
       lower_bound: 1e-5

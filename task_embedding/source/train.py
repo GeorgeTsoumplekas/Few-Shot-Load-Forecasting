@@ -50,7 +50,7 @@ def objective(trial, ht_config, data_config, data_filenames):
 
     for fold, (train_idx,val_idx) in enumerate(kfold.split(data_filenames)):
         print(f"Fold {fold+1}|{k_folds}")
-        
+
         # Tasks used for training within this fold
         train_filenames = [data_filenames[idx] for idx in train_idx]
 
@@ -63,7 +63,7 @@ def objective(trial, ht_config, data_config, data_filenames):
                                                  task_batch_size)
         val_tasks_dataloader = build_tasks_set(val_filenames,
                                                data_config,
-                                               task_batch_size)       
+                                               task_batch_size)
         network = model_builder.build_network(1, output_shape, lstm_hidden_units, device)
         optimizer = engine.build_optimizer(network, learning_rate)
         loss_fn = nn.MSELoss()
@@ -110,7 +110,7 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
                                 direction='minimize')
     study.optimize(lambda trial: objective(trial, ht_config, data_config, data_filenames),
                    n_trials=n_trials)
-    
+
     # Create visializations regarding the hyperparameter tuning process
     optuna.visualization.matplotlib.plot_parallel_coordinate(study)
     target_file = results_dir_name + 'parallel_coordinates.png'
@@ -174,7 +174,7 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     val_tasks_dataloader = build_tasks_set(val_filenames,
                                            data_config,
                                            task_batch_size)
-    
+
     # Get the model, optimizer, early stopper and loss function
     network = model_builder.build_network(input_shape=1,
                                           output_shape=output_shape,
@@ -232,7 +232,7 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
     test_tasks_dataloader = build_tasks_set(test_filenames,
                                             data_config,
                                             task_batch_size)
-    
+
     # Load optimal model
     network = model_builder.build_network(input_shape=1,
                                           output_shape=output_shape,
@@ -285,7 +285,7 @@ def embed_task_set(opt_config, data_config, data_filenames, results_dir_name):
 
     for task_data, timeseries_code in tasks_dataloader:
         train_dataloader, _ = build_task(task_data, sample_batch_size, data_config)
-    
+
         # embed task function here
         task_embedding = engine.embed_task(network, train_dataloader, device)
 
@@ -345,17 +345,8 @@ def main():
                                        ht_config,
                                        data_config,
                                        train_filenames)
-    
-    print(f"Optimal configuration: {opt_config}")
 
-    # opt_config = {'task_batch_size': 1,
-    #               'sample_batch_size': 1,
-    #               'train_epochs': 5,
-    #               'max_epochs': 1000,
-    #               'patience': 3,
-    #               'min_delta': 0.0,
-    #               'learning_rate': 0.0005363835608033376,
-    #               'embedding_ratio': 0.15}
+    print(f"Optimal configuration: {opt_config}")
 
     # Train optimal task-embedding model
     train_losses, val_losses = train_optimal(opt_config,
@@ -388,6 +379,15 @@ def main():
     with open(target_file, 'w', encoding='utf8') as outfile:
         json.dump(test_tasks_embeddings, outfile)
 
+    # Visualize embeddings
+    output_shape = data_config['week_num']*7*data_config['day_measurements']
+    embedding_size = round(opt_config['embedding_ratio']*output_shape)
+
+    utils.visualize_embeddings(train_tasks_embeddings,
+                               test_tasks_embeddings,
+                               embedding_size,
+                               results_dir_name,
+                               config['tsne_perplexity'])
 
 if __name__ == "__main__":
     main()
