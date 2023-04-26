@@ -4,6 +4,6 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-python3 ./task_embedding/source/train.py --train_dir "./data/mini_iONA_train_aggregated/" \
-                                         --test_dir "./data/mini_iONA_test_aggregated/" \
+python3 ./task_embedding/source/train.py --train_dir "./data/iONA_train_aggregated/" \
+                                         --test_dir "./data/iONA_test_aggregated/" \
                                          --config "./task_embedding/config.yaml"
