@@ -342,8 +342,14 @@ def split_task(task_data, data_config):
 
 
 def get_full_train_set(train_dataloader):
-    """
+    """Extract the support set of a task given its DataLoader.
 
+    This is necessary for computing the loss function in the recurrent autoencoder.
+
+    Args:
+        train_dataloader: A torch DataLoader object that corresponds to the examined support set.
+    Returns:
+        A torch tensor that contains the subsequences of the set stacked together.
     """
 
     train_data = torch.Tensor([])
