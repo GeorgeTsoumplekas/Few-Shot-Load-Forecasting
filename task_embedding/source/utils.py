@@ -1,3 +1,9 @@
+"""Collection of utility functions.
+
+These are functions that surround the training/fine-tuning/hyperparameter-tuning processes and
+facilitate them but do not contain any if the main logic of them.
+"""
+
 import os
 import random
 
@@ -43,12 +49,30 @@ def set_device():
 
 
 def save_model(network_state_dict, results_dir_name):
+    """Save given model.
+
+    Define the target file in which the model will be saved and save it as a .pth file.
+
+    Args:
+        network_state_dict: The state dictionary of the model.
+        results_dir_name: A string with the name of the directory the results will be saved.
+    """
 
     target_file = results_dir_name + 'optimal_trained_model.pth'
     torch.save(obj=network_state_dict, f=target_file)
 
 
 def plot_learning_curve(train_losses, test_losses, results_dir_name):
+    """Plot the learning curve of the model during training.
+
+    The plot contains the train loss and the test loss of the model for the number
+    of epochs that it has been trained for. The plot is saved as a png file.
+
+    Args:
+        train_losses: A list that contains the train loss of each training epoch.
+        test_losses: A list that contains the test loss of each training epoch.
+        results_dir_name: A string with the name of the directory the results will be saved.
+    """
 
     plt.figure()
     plt.plot(train_losses, c='b', label='Train Loss')
@@ -63,6 +87,16 @@ def plot_learning_curve(train_losses, test_losses, results_dir_name):
 
 
 def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
+    """Plot predicted vs true values of the given timeseries.
+
+    Both true and predicted values are normalized and the plot is saved as a png file.
+
+    Args:
+        y_true: A list that contains the true output values of the examined timeseries.
+        y_pred: A list that contains the predicted output values of the examined timeseries.
+        results_dir_name: A string with the name of the directory the results will be saved.
+        timeseries_code: A list with a string that is the id of the examined timeseries.
+    """
 
     plt.figure()
     plt.plot(y_true, 'b', label='True')
@@ -81,24 +115,45 @@ def visualize_embeddings(train_task_embeddings,
                          embedding_size,
                          results_dir_name,
                          perplexity):
+    """Create 2D visualizations of the embeddings of the tasks.
 
+    First, PCA is applied to reduce the dimensionality of the tasks and then tSNE is applied
+    to further reduce the dimensionality to two dimensions. Fianlly, a scatter plot that contains
+    the embeddings of both training and test tasks is created and saved.
+
+    Args:
+        train_task_embeddings: A dictionary that contains the embedding of each task in the
+            train set.
+        test_task_embeddings: A dictionary that contains the embedding of each task in the
+            test set.
+        embedding_size: An integer that is the length of the task embedding.
+        results_dir_name: A string with the name of the directory the results will be saved.
+        perplexity: A float related to the number of nearest neighbors that is used in other
+            manifold learning algorithms.
+    """
+
+    # Create an array that contains the embeddings of the train set tasks.
     train_embeddings = np.empty((embedding_size,))
     for embedding in train_task_embeddings.values():
         train_embeddings = np.vstack([train_embeddings, np.array(embedding)])
 
+    # Create an array that contains the embeddings of the test set tasks.
     test_embeddings = np.empty((embedding_size,))
     for embedding in test_task_embeddings.values():
         test_embeddings = np.vstack([test_embeddings, np.array(embedding)])
 
+    # Apply PCA
     pca = PCA(n_components=30)
     train_embeddings_pca = pca.fit_transform(train_embeddings)
     test_embeddings_pca = pca.transform(test_embeddings)
 
+    # Stack all embeddings together and apply tSNE to all of them altogether.
     total_embeddings_pca = np.vstack([train_embeddings_pca, test_embeddings_pca])
     total_embeddings_tsne = TSNE(n_components=2,
                                  learning_rate='auto',
                                  perplexity=perplexity).fit_transform(total_embeddings_pca)
 
+    # Separate train and test tasks to their dimensions, then plot.
     x_train_embeddings_tsne = total_embeddings_tsne[:train_embeddings_pca.shape[0], 0]
     y_train_embeddings_tsne = total_embeddings_tsne[:train_embeddings_pca.shape[0], 1]
 
