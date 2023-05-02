@@ -285,6 +285,10 @@ def main():
     if not os.path.exists(results_dir_name):
         os.makedirs(results_dir_name)
 
+    # Set CUDA environment variables for reproducibility purposes
+    # So that the LSTMs show deterministic behavior
+    utils.set_cuda_reproducibility()
+
     # Data loading and processing
     data = data_setup.load_timeseries(raw_series_filepath)
     x_train, y_train, x_test, y_test = data_setup.split_train_test(data,

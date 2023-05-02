@@ -4,6 +4,8 @@ These are functions that surround the training/hyperparameter-tuning process and
 facilitate it but do not contain any if the main logic of it.
 """
 
+import os
+
 from matplotlib import pyplot as plt
 import torch
 
@@ -18,6 +20,19 @@ def set_device():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     return device
+
+
+def set_cuda_reproducibility():
+    """Make LSTMs deterministic when executed on GPUs to ensure reproducibility.
+
+    See warning at https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+    """
+
+    if torch.cuda.is_available():
+        if torch.version.cuda == "10.1":
+            os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        elif torch.version.cuda >= "10.2":
+            os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:2"
 
 
 def save_optimal_model(network, results_dir_name):

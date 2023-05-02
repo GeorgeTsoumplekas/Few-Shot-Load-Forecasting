@@ -22,6 +22,19 @@ def set_device():
     return device
 
 
+def set_cuda_reproducibility():
+    """Make LSTMs deterministic when executed on GPUs to ensure reproducibility.
+
+    See warning at https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+    """
+
+    if torch.cuda.is_available():
+        if torch.version.cuda == "10.1":
+            os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        elif torch.version.cuda >= "10.2":
+            os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:2"
+
+
 def save_model(network, results_dir_name):
     """Save given model.
 

@@ -35,7 +35,7 @@ import utils
 def objective(trial, ht_config, data_config, data_filenames):
     """Training process of the hyperparameter tuning process.
 
-    Firstly, the cross-validation schema is defined. Based on that, the model is trained for
+    First, the cross-validation schema is defined. Based on that, the model is trained for
     a specific set of hyperparameter values and the mean validation loss, which is the objective
     value to be minimized, is calcualted.
 
@@ -420,6 +420,10 @@ def main():
     results_dir_name = './task_invariant_lstm/results/'
     if not os.path.exists(results_dir_name):
         os.makedirs(results_dir_name)
+
+    # Set CUDA environment variables for reproducibility purposes
+    # So that the LSTMs show deterministic behavior
+    utils.set_cuda_reproducibility()
 
     # Hyperparameter tuning
     n_trials = config['n_trials']
