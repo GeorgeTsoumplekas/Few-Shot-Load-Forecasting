@@ -62,6 +62,10 @@ class Encoder(nn.Module):
         output, (self.h_n, self.c_n) = self.lstm(network_input, (self.h_n, self.c_n))
         output = output.view(-1, self.hidden_units)
 
+        # TODO: Test which one is better
+        output = output[-1].unsqueeze(dim=0)
+        # output = torch.unsqueeze(torch.mean(output, axis=0), dim=0)
+
         return output , self.h_n, self.c_n
 
 

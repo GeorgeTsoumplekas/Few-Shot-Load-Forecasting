@@ -1,3 +1,18 @@
+"""Pipeline for training/evaluating a Recurrent AutoEncoder and creating the task embeddings.
+
+At first, the time series used for training and testing are defined based on the given
+directories. Then a hyperparameter optimization is performed using cross-validation
+on the tasks of the training set. After the optimal hyperparameters have been determined,
+a model is trained and then evaluated based on these. Finally, the embeddings of the tasks are
+created and saved. The optimal model is saved as well as its learning curve and other plots relative
+to its hyperparameter tuning and visualizeng the task embeddings.
+
+Typical usage example:
+python3 train.py --train_dir "path/to/train_dir" \
+                 --test_dir "path/to/train_dir" \
+                 --config "path/to/config.yaml"
+"""
+
 import argparse
 import json
 import os
@@ -16,6 +31,21 @@ import utils
 
 
 def objective(trial, ht_config, data_config, data_filenames):
+    """Training process of the hyperparameter tuning process.
+
+    First, the cross-validation schema is defined. Based on that, the model is trained for
+    a specific set of hyperparameter values and the mean validation loss, which is the objective
+    value to be minimized, is calcualted.
+
+    Args:
+        trial: An optuna trial object, handled internally by optuna.
+        ht_config: A dictionary that defines the hyperparameter search space.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the training tasks.
+    Returns:
+        A float that represents the mean validation error, which we want to minimize.
+    """
 
     # Hyperparameter search space
     config = {
@@ -68,11 +98,8 @@ def objective(trial, ht_config, data_config, data_filenames):
         optimizer = engine.build_optimizer(network, learning_rate)
         loss_fn = nn.MSELoss()
 
-        print("Training...")
-
         # Train model using the train tasks
         for _ in range(num_epochs):
-            # train_epoch function
             _ = engine.train_epoch(network,
                                    train_tasks_dataloader,
                                    loss_fn,
@@ -81,9 +108,7 @@ def objective(trial, ht_config, data_config, data_filenames):
                                    sample_batch_size,
                                    data_config)
 
-        print("Evaluating...")
-
-        # Total validation loss for the specific fold
+        # Evaluate on validation tasks
         val_loss = engine.evaluate(network,
                                    val_tasks_dataloader,
                                    sample_batch_size,
@@ -91,9 +116,8 @@ def objective(trial, ht_config, data_config, data_filenames):
                                    loss_fn,
                                    device)
 
+        # Total validation loss for the specific fold
         mean_fold_val_losses[fold] = val_loss
-
-        print()
 
     val_loss_sum = 0.0
     for _, value in mean_fold_val_losses.items():
@@ -104,6 +128,22 @@ def objective(trial, ht_config, data_config, data_filenames):
 
 
 def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, data_filenames):
+    """Perform hyperparameter tuning of the model on the given search space.
+
+    This is done using the optuna library. Additionally to defining the best hyperparameters,
+    a number of plots is created and saved that gives additional insights on the process.
+
+    Args:
+        n_trials: An integer that defines the total number of hyperparameter values' combinations
+            to be tried out.
+        results_dir_name: A string with the name of the directory the results will be saved.
+        ht_config: A dictionary that defines the hyperparameter search space.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the training tasks.
+    Returns:
+        A dictionary that contains the optimal hyperparameter values.
+    """
 
     # Hyperparameter tuning process
     study = optuna.create_study(sampler=optuna.samplers.TPESampler(),
@@ -152,6 +192,23 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
 
 
 def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
+    """Training process of the optimal model.
+
+    The model is trained based on the optimal hyperparameters determined from the previously
+    done hyperparameter tuning. The train and validation losses are calculated for each epoch and
+    after training is done, the optimal model is saved. In order to prevent overfitting, early
+    stopping is applied.
+
+    Args:
+        opt_config: A dictionary that contains the optimal hyperparameter values.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the training tasks.
+        results_dir_name: A string with the name of the directory the results will be saved.
+    Returns:
+        A list that contains the training loss of each training epoch and a list that contains
+        the validation loss of each training epoch.
+    """
 
     device = utils.set_device()
     task_batch_size = opt_config['task_batch_size']
@@ -163,14 +220,17 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     patience =  opt_config['patience']
     min_delta = opt_config['min_delta']
 
+    # Split meta-train set to meta-train and meta-validation sets
     train_filenames, val_filenames = train_test_split(data_filenames,
                                                       test_size=0.2,
                                                       random_state=42)
 
+    # Create dataloader for the training tasks
     train_tasks_dataloader = build_tasks_set(train_filenames,
                                              data_config,
                                              task_batch_size)
 
+    # Create dataloader for the validation tasks
     val_tasks_dataloader = build_tasks_set(val_filenames,
                                            data_config,
                                            task_batch_size)
@@ -187,9 +247,9 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     train_losses = []
     val_losses = []
 
-    for epoch in range(num_epochs):
-        print(f"Epoch {epoch+1}|{num_epochs}")
-        # train_epoch
+    # Model training using training tasks / evaluation using validation tasks
+    for _ in range(num_epochs):
+        # Train model
         train_loss = engine.train_epoch(network,
                                    train_tasks_dataloader,
                                    loss_fn,
@@ -199,7 +259,7 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                    data_config)
         train_losses.append(train_loss)
 
-        # evaluate epoch
+        # Evaluate model
         val_loss = engine.evaluate(network,
                                    val_tasks_dataloader,
                                    sample_batch_size,
@@ -208,9 +268,8 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                    device)
         val_losses.append(val_loss)
 
-        # check for early stop
+        # Check if early stopping needs to be applied
         if early_stopper.early_stop(val_loss, network):
-            print(f"Training stopped at epoch {epoch+1}.")
             break
 
     # Save best model
@@ -221,6 +280,21 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
 
 
 def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
+    """Evaluate the trained optimal model on the meta-test set tasks.
+
+    The optimal model that occured after training using the optimal hyperparameters is loaded
+    and then evaluated on each test task. The total test loss is calculated while for each task
+    prediction plots based on the reconstructions are created and saved.
+
+    Args:
+        opt_config: A dictionary that contains the optimal hyperparameters for the model.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        test_filenames: A list of strings that contains the paths to the test tasks.
+        results_dir_name: A string with the name of the directory the results will be saved.
+    Return:
+        A float that is the mean reconstruction loss of the test tasks.
+    """
 
     device = utils.set_device()
     task_batch_size = opt_config['task_batch_size']
@@ -229,11 +303,12 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
     lstm_hidden_units = round(opt_config['embedding_ratio']*output_shape)
     model_save_path = results_dir_name + 'optimal_trained_model.pth'
 
+    # Create dataloader for the test tasks
     test_tasks_dataloader = build_tasks_set(test_filenames,
                                             data_config,
                                             task_batch_size)
 
-    # Load optimal model
+    # Load optimal model and define loss function
     network = model_builder.build_network(input_shape=1,
                                           output_shape=output_shape,
                                           hidden_units=lstm_hidden_units,
@@ -243,6 +318,8 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
     loss_fn = nn.MSELoss()
 
     test_loss = 0.0
+
+    # Evaluation on each test task
     for test_task_data, test_timeseries_code in test_tasks_dataloader:
         test_dataloader, _ = build_task(test_task_data, sample_batch_size, data_config)
 
@@ -262,6 +339,20 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
 
 
 def embed_task_set(opt_config, data_config, data_filenames, results_dir_name):
+    """Generates the embeddings for a specific tasks set.
+
+    The optimal trained model is loaded and then the embedding for each task in the set of tasks
+    is generated.
+
+    Args:
+        opt_config: A dictionary that contains the optimal hyperparameters for the model.
+        data_config: A dictionary that contains various user-configured values that define
+            the splitting and preprocessing of the data.
+        data_filenames: A list of strings that contains the paths to the tasks.
+        results_dir_name: A string with the name of the directory the results will be saved.
+    Returns:
+        A dictionary that contains the embedding of each task in tasks set.
+    """
 
     device = utils.set_device()
     task_batch_size = opt_config['task_batch_size']
@@ -270,6 +361,7 @@ def embed_task_set(opt_config, data_config, data_filenames, results_dir_name):
     lstm_hidden_units = round(opt_config['embedding_ratio']*output_shape)
     model_save_path = results_dir_name + 'optimal_trained_model.pth'
 
+    # Contains the embedding of each task in the examined set of tasks
     all_embeddings = {}
 
     # Load optimal model
@@ -279,6 +371,7 @@ def embed_task_set(opt_config, data_config, data_filenames, results_dir_name):
                                           device=device)
     network.load_state_dict(torch.load(f=model_save_path))
 
+    # Create tasks set dataloader
     tasks_dataloader = build_tasks_set(data_filenames,
                                        data_config,
                                        task_batch_size)
@@ -286,16 +379,24 @@ def embed_task_set(opt_config, data_config, data_filenames, results_dir_name):
     for task_data, timeseries_code in tasks_dataloader:
         train_dataloader, _ = build_task(task_data, sample_batch_size, data_config)
 
-        # embed task function here
+        # Embed task
         task_embedding = engine.embed_task(network, train_dataloader, device)
 
-        # add to dictionary
+        # The task embedding is trasformed to a list before being saved
         all_embeddings[timeseries_code[0]] = task_embedding.tolist()
 
     return all_embeddings
 
 
 def main():
+    """End-to-end logic to run the whole experiment.
+
+    Initially, the given command line arguments are parsed and the training and test tasks as
+    well as the experiment's configuration are defined. Hyperparameter tuning is then performed
+    to determine the optimal hyperparameters and based on these, the optimal model is trained and
+    then evaluated. Finally, the embeddings of both train and test tasks are generated, stored and
+    visualized.
+    """
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_dir', dest='train_dir')
@@ -346,8 +447,6 @@ def main():
                                        data_config,
                                        train_filenames)
 
-    print(f"Optimal configuration: {opt_config}")
-
     # Train optimal task-embedding model
     train_losses, val_losses = train_optimal(opt_config,
                                              data_config,
@@ -362,19 +461,24 @@ def main():
                      results_dir_name)
     print(f"Test loss: {test_loss}")
 
-    # Get embeddings for both train and test tasks
+    # Get embeddings for train tasks
     train_tasks_embeddings = embed_task_set(opt_config,
                                             data_config,
                                             train_filenames,
                                             results_dir_name)
+
+    # Save embeddings as a json file
     target_file = train_dir[:-11] + 'embeddings.json'
     with open(target_file, 'w', encoding='utf8') as outfile:
         json.dump(train_tasks_embeddings, outfile)
 
+    # Get embeddings for test tasks
     test_tasks_embeddings = embed_task_set(opt_config,
                                            data_config,
                                            test_filenames,
                                            results_dir_name)
+
+    # Save embeddings as a json file
     target_file = test_dir[:-11] + 'embeddings.json'
     with open(target_file, 'w', encoding='utf8') as outfile:
         json.dump(test_tasks_embeddings, outfile)

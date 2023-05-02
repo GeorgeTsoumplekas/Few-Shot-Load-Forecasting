@@ -108,8 +108,19 @@ def build_optimizer(network, learning_rate):
 
 
 def model_step(network, dataloader, device):
-    """
-    
+    """Perform a full forward pass of the recurrent autoencoder on the given data set.
+
+    This function is used when training or evaluating the model to get the reconstruction of the
+    given dataset and is not necessary for inference (getting the task embeddings). First the all
+    samples are passed through the encoder and the last state of the encoder is used as the initial
+    state of the decoder. Then the decoder produces the reconstructed dataset in reverse order.
+
+    Args:
+        network: A custom RAE model object to be trained/validated.
+        dataloader: A torch DataLoader object that contains the dataset.
+        device: A string that defines the device on which calculations should take place.
+    Returns:
+        A torch tensor that contains the reconstructed data set.
     """
 
     # Reset encoder states
@@ -118,12 +129,7 @@ def model_step(network, dataloader, device):
     x_sample = None
     for x_sample, _ in dataloader:
         x_sample = x_sample.to(device)
-        enc_output, h_n, c_n = network.encoder_forward(x_sample)
-
-        # TODO: Test which one is better and then move it inside the encoder's
-        # forward method
-        enc_output = enc_output[-1].unsqueeze(dim=0)
-        # enc_output = torch.unsqueeze(torch.mean(enc_output, axis=0), dim=0)
+        _, h_n, c_n = network.encoder_forward(x_sample)
 
     # Set decoder state from the last encoder state
     network.decoder_set_states(h_n, c_n)
@@ -150,8 +156,22 @@ def train_epoch(
     sample_batch_size,
     data_config,
     ):
-    """
-    
+    """The training loop of the model for a specific epoch.
+
+    During an epoch, the model loads each training task and performs a train step in each one
+    of them. The loss is calculated as the sum of the losses of each task divided by the total
+    number of tasks seen by the model during the epoch.
+
+    Args:
+        network: A custom RAE model object to be trained.
+        tasks_dataloader: A torch Dataloader that contains the training tasks.
+        loss_fn: A function that defines the loss function based on which the training will be done.
+        optimizer: A torch optimizer object that defines the optimizer used in the training process.
+        device: A string that defines the device on which calculations should take place.
+        sample_batch_size: An integer that is the number of subsequences in each batch.
+        data_config: A dictionary that contains various user-configured values.
+    Returns:
+        A float that represents the model loss on the training set for the specific epoch.
     """
 
     network.train()
@@ -163,7 +183,10 @@ def train_epoch(
                                                     sample_batch_size,
                                                     data_config)
 
+        # Reconstructed support set
         dec_output = model_step(network, train_dataloader, device)
+
+        # Original support set
         true_output = data_setup.get_full_train_set(train_dataloader).to(device)
 
         loss = loss_fn(dec_output, true_output)
@@ -178,13 +201,29 @@ def train_epoch(
 
 
 def evaluate_task(network, val_dataloader, loss_fn, device):
-    """
-    
+    """Evaluates the model on a single task of the validation/test task set.
+
+    The model reconstructs the support set of the given task and the reconstruction loss is
+    calculated based on the provided loss function.
+
+    Args:
+        network: A custom RAE model object to be evaluated.
+        val_dataloader: A torch Dataloader object that contains the support set of the
+            validation/test task.
+        loss_fn: A function that defines the loss function based on which the evaluation
+             will be done.
+        device: A string that defines the device on which calculations should take place.
+    Returns:
+        A float that is the reconstruction loss for the specific task, a tensor that contains
+        the reconstructed support set and a tensor that contains the original support set.
     """
 
     network.eval()
     with torch.no_grad():
+        # Reconstructed support set
         dec_output = model_step(network, val_dataloader, device)
+
+        # Original support set
         true_output = data_setup.get_full_train_set(val_dataloader).to(device)
 
         val_task_loss = loss_fn(dec_output, true_output).item()
@@ -193,8 +232,21 @@ def evaluate_task(network, val_dataloader, loss_fn, device):
 
 
 def evaluate(network, val_tasks_dataloader, sample_batch_size, data_config, loss_fn, device):
-    """
-    
+    """Evaluate model on the meta-validation/test set.
+
+    The model reconstructs the support set of all tasks in the meta-validation/test set and then
+    the loss is calculated as the mean loss of all individual tasks.
+
+    Args:
+        network: A custom RAE model object to be evaluated.
+        val_tasks_dataloader: A torch Dataloader that contains the validation/test tasks.
+        sample_batch_size: An integer that is the number of subsequences in each batch.
+        data_config: A dictionary that contains various user-configured values.
+        loss_fn: A function that defines the loss function based on which the evaluation
+             will be done.
+        device: A string that defines the device on which calculations should take place.
+    Returns:
+        A float that is the mean reconstruction loss for all tasks in the meta-set.
     """
 
     val_loss = 0.0
@@ -213,8 +265,17 @@ def evaluate(network, val_tasks_dataloader, sample_batch_size, data_config, loss
 
 
 def embed_task(network, dataloader, device):
-    """
-    
+    """Forward pass of the recurrent autoencoder that yields the embedding of a task.
+
+    First, the embedding of each subsequence of the task is created and the final embedding
+    of the whole task is the mean of all subsequence embeddings.
+
+    Args:
+        network: A custom RAE embedding model object.
+        dataloader: A torch Dataloader that contains the task to be embedded.
+        device: A string that defines the device on which calculations should take place.
+    Returns:
+        A torch tensor that represents the embedding of the task.
     """
 
     # Contains the encoder output for all subsequences
@@ -226,11 +287,6 @@ def embed_task(network, dataloader, device):
     for x_sample, _ in dataloader:
         x_sample = x_sample.to(device)
         enc_output, _, _ = network.encoder_forward(x_sample)
-
-        # TODO: Test which one is better and then move it inside the encoder's
-        # forward method
-        enc_output = enc_output[-1].unsqueeze(dim=0)
-        # enc_output = torch.unsqueeze(torch.mean(enc_output, axis=0), dim=0)
 
         enc_outputs = torch.cat([enc_outputs, enc_output], dim=0)
 
