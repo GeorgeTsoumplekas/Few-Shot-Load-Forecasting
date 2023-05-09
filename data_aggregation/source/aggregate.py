@@ -62,6 +62,8 @@ def aggregate_timeseries(ts_codes: np.ndarray,
 def create_set(set_min_length: int,
                set_max_length: int,
                set_size: int,
+               set_mean_length: int,
+               set_std: int,
                set_metadata_dir: str,
                num_timeseries: int,
                source_dir: str,
@@ -93,7 +95,12 @@ def create_set(set_min_length: int,
     """
 
     # Random length of each aggregated time series in months
-    ts_lengths = rng.integers(set_min_length, set_max_length, set_size, endpoint=True)
+    # ts_lengths = rng.integers(set_min_length, set_max_length, set_size, endpoint=True)
+    ts_lengths = rng.normal(set_mean_length, set_std, set_size).round()
+    ts_lengths = [int(length) for length in ts_lengths]
+    ts_lengths = [set_min_length if length<set_min_length else length for length in ts_lengths]
+    ts_lengths = [set_max_length if length>set_max_length else length for length in ts_lengths]
+    ts_lengths = np.array(ts_lengths)
 
     # Column index in the segments metadata file that corresponds to the randomly chosen
     # start month of the aggregated time series
@@ -148,8 +155,12 @@ def main() -> None:
     test_metadata_dir = config['test_metadata_dir']
     train_min_length = config['train_min_length']
     train_max_length = config['train_max_length']
+    train_mean_length = config['train_mean_length']
+    train_std = config['train_std']
     test_min_length = config['test_min_length']
     test_max_length = config['test_max_length']
+    test_mean_length = config['test_mean_length']
+    test_std = config['test_std']
     num_timeseries = config['num_timeseries']
     train_size = config['train_size']
     test_size = config['test_size']
@@ -169,6 +180,8 @@ def main() -> None:
     create_set(train_min_length,
                train_max_length,
                train_size,
+               train_mean_length,
+               train_std,
                train_metadata_dir,
                num_timeseries,
                source_train_dir,
@@ -179,6 +192,8 @@ def main() -> None:
     create_set(test_min_length,
                test_max_length,
                test_size,
+               test_mean_length,
+               test_std,
                test_metadata_dir,
                num_timeseries,
                source_test_dir,
