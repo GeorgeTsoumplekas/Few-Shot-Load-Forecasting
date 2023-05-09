@@ -16,6 +16,7 @@ python3 train.py --train_dir "path/to/train_dir" \
 import argparse
 import json
 import os
+from time import time
 import yaml
 
 from matplotlib import pyplot as plt
@@ -81,6 +82,8 @@ def objective(trial, ht_config, data_config, data_filenames):
     for fold, (train_idx,val_idx) in enumerate(kfold.split(data_filenames)):
         print(f"Fold {fold+1}|{k_folds}")
 
+        fold_start = time()
+
         # Tasks used for training within this fold
         train_filenames = [data_filenames[idx] for idx in train_idx]
 
@@ -99,7 +102,9 @@ def objective(trial, ht_config, data_config, data_filenames):
         loss_fn = nn.MSELoss()
 
         # Train model using the train tasks
-        for _ in range(num_epochs):
+        for epoch in range(num_epochs):
+            print(f"Epoch {epoch+1}|{num_epochs}")
+            epoch_start = time()
             _ = engine.train_epoch(network,
                                    train_tasks_dataloader,
                                    loss_fn,
@@ -107,6 +112,8 @@ def objective(trial, ht_config, data_config, data_filenames):
                                    device,
                                    sample_batch_size,
                                    data_config)
+            epoch_end = time()
+            print(f"Epoch elapsed time: {(epoch_end-epoch_start):.3f}s")
 
         # Evaluate on validation tasks
         val_loss = engine.evaluate(network,
@@ -118,6 +125,9 @@ def objective(trial, ht_config, data_config, data_filenames):
 
         # Total validation loss for the specific fold
         mean_fold_val_losses[fold] = val_loss
+
+        fold_end = time()
+        print(f"Fold elapsed time: {(fold_end-fold_start):.3f}s")
 
     val_loss_sum = 0.0
     for _, value in mean_fold_val_losses.items():
@@ -248,7 +258,11 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     val_losses = []
 
     # Model training using training tasks / evaluation using validation tasks
-    for _ in range(num_epochs):
+    print(f"Training optimal model.")
+    for epoch in range(num_epochs):
+        print(f"Epoch {epoch+1}|{num_epochs}")
+        epoch_start = time()
+
         # Train model
         train_loss = engine.train_epoch(network,
                                    train_tasks_dataloader,
@@ -267,6 +281,9 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                    loss_fn,
                                    device)
         val_losses.append(val_loss)
+
+        epoch_end = time()
+        print(f"Epoch elapsed time: {(epoch_end-epoch_start):.3f}s")
 
         # Check if early stopping needs to be applied
         if early_stopper.early_stop(val_loss, network):
@@ -462,10 +479,13 @@ def main():
     print(f"Test loss: {test_loss}")
 
     # Get embeddings for train tasks
+    embed_start = time()
     train_tasks_embeddings = embed_task_set(opt_config,
                                             data_config,
                                             train_filenames,
                                             results_dir_name)
+    embed_end = time()
+    print(f"Train set embedding elapsed time: {(embed_end-embed_start):.3f}s")
 
     # Save embeddings as a json file
     target_file = train_dir[:-11] + 'embeddings.json'
@@ -473,10 +493,13 @@ def main():
         json.dump(train_tasks_embeddings, outfile)
 
     # Get embeddings for test tasks
+    embed_start = time()
     test_tasks_embeddings = embed_task_set(opt_config,
                                            data_config,
                                            test_filenames,
                                            results_dir_name)
+    embed_end = time()
+    print(f"Test set embedding elapsed time: {(embed_end-embed_start):.3f}s")
 
     # Save embeddings as a json file
     target_file = test_dir[:-11] + 'embeddings.json'
