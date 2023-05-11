@@ -398,8 +398,8 @@ class MetaLearner(nn.Module):
 
         self.network.zero_grads(params=names_weights_copy)
 
-        # Using second order causes the crash - change to use_second_order when having
-        # the available resources
+        # Using second order causes the crash - change to use_second_order when enough
+        # resources are available
         grads = torch.autograd.grad(inner_epoch_loss,
                                     names_weights_copy.values(),
                                     create_graph=use_second_order,

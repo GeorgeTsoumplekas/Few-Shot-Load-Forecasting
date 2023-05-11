@@ -7,19 +7,19 @@
  n_trials: 15
  seed: 42
  ht_config:
-    k_folds: 5
+    k_folds: 3
     task_batch_size: 1
     sample_batch_size: 1
     num_inner_steps: 3
     eta_min: 1e-6
-    second_order: False
-    second_to_first_order_epoch: 1
+    second_order: True
+    second_to_first_order_epoch: 8
     train_epochs:
       lower_bound: 10
       upper_bound: 30
     lstm_hidden_units:
       lower_bound: 16
-      upper_bound: 80
+      upper_bound: 64
     init_learning_rate:
       lower_bound: 1e-4
       upper_bound: 1e-3
