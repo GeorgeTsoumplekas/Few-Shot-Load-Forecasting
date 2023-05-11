@@ -90,16 +90,24 @@ class MetaLearner(nn.Module):
 
         self.to(self.device)
 
-        # self.meta_optimizer = optimizers.build_meta_optimizer(
-        #     params=self.trainable_parameters(),
-        #     learning_rate=self.meta_learning_rate
-        #     )
+        self.meta_optimizer = optimizers.build_meta_optimizer(
+            params=self.trainable_parameters(),
+            learning_rate=self.meta_learning_rate
+            )
 
-        # self.meta_scheduler = optimizers.build_meta_scheduler(
-        #     meta_optimizer=self.meta_optimizer,
-        #     num_epochs=self.num_epochs,
-        #     eta_min=self.eta_min
-        #     )
+        self.meta_scheduler = optimizers.build_meta_scheduler(
+            meta_optimizer=self.meta_optimizer,
+            num_epochs=self.num_epochs,
+            eta_min=self.eta_min
+            )
+        
+        print("\nOuter Loop Parameters")
+        num_outer_loop_parameters = 0
+        outer_loop_parameters = self.named_params()
+        for name, param in outer_loop_parameters.items():
+            print(name, param.shape)
+            num_outer_loop_parameters += np.prod(param.shape)
+        print(f"Total outer loop parameters: {num_outer_loop_parameters}")
 
 
     def get_inner_loop_params(self, state_dict, is_copy):
@@ -137,6 +145,62 @@ class MetaLearner(nn.Module):
             total_inner_loop_params += np.prod(param.shape)
 
         return total_inner_loop_params
+    
+
+    def trainable_parameters(self):
+
+        params = {}
+
+        # Base model parameters
+        for name, param in self.names_weights.items():
+            params[name] = param
+
+        # Learnable inner loop optimizer learning rates
+        for name, param in self.inner_loop_optimizer.named_parameters():
+            params[name] = param
+
+        # Hierarchical Clustering Model parameters
+        for name, param in self.clustering.named_parameters():
+            params[name] = param
+
+        # Parameter Gate parameters
+        for name, param in self.parameter_gate.named_parameters():
+            params[name] = param
+
+        for _, param in params.items():
+            if param.requires_grad:
+                yield param
+
+    
+    def named_params(self):
+
+        params = {}
+
+        # Base model parameters
+        for name, param in self.names_weights.items():
+            params[name] = param
+
+        # Learnable inner loop optimizer learning rates
+        for name, param in self.inner_loop_optimizer.named_parameters():
+            params[name] = param
+
+        # Hierarchical Clustering Model parameters
+        for name, param in self.clustering.named_parameters():
+            params[name] = param
+
+        # Parameter Gate parameters
+        for name, param in self.parameter_gate.named_parameters():
+            params[name] = param
+
+        return params
+    
+
+    def meta_train(self, data_filenames, optimal_mode):
+        pass
+
+
+    def meta_test(self, data_filenames, optimal_mode, results_dir_name=None):
+        pass
 
 
 def build_meta_learner(args, data_config):

@@ -300,10 +300,10 @@ class BaseLearner(nn.Module):
                                                       1
                                                       )
 
-        self.layer_dict['linear_2'] = MetaLinearLayer(self.output_shape,
-                                                      self.output_shape,
-                                                      2
-                                                      )
+        # self.layer_dict['linear_2'] = MetaLinearLayer(self.output_shape,
+        #                                               self.output_shape,
+        #                                               2
+        #                                               )
 
 
     def zero_grads(self, params=None):
@@ -355,12 +355,12 @@ class BaseLearner(nn.Module):
 
         output = self.layer_dict['lstm'](x_sample, params, is_query_set)
         output = self.layer_dict['linear_1'](output, params)
-        output = self.layer_dict['linear_2'](output, params)
+        # output = self.layer_dict['linear_2'](output, params)
         return output[-1].unsqueeze(dim=0)
 
 
 class HierarchicalClustering(nn.Module):
-    
+
     def __init__(self, num_levels, num_centers, sigma, embedding_size):
 
         super().__init__()
