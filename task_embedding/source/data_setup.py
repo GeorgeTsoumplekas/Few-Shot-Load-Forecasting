@@ -289,6 +289,7 @@ def split_task(task_data, data_config):
     week_num = data_config['week_num']
     pred_days = data_config['pred_days']
     test_days = data_config['test_days']
+    epsilon = 0.1
 
     # Number of days in each input subsequence
     x_seq_days = week_num*7
@@ -337,6 +338,20 @@ def split_task(task_data, data_config):
 
     x_task_test = (x_task_test - train_mean) / train_std
     y_task_test = (y_task_test - train_mean) / train_std
+
+    # Shift subsequences to be positive (to avoid division with zero when calculating the
+    # log likelihood gamma regression loss function)
+    x_task_train_min = torch.min(x_task_train.view(-1))
+    x_task_train += (torch.abs(x_task_train_min) + epsilon)
+
+    x_task_test_min = torch.min(x_task_test.view(-1))
+    x_task_test += (torch.abs(x_task_test_min) + epsilon)
+
+    y_task_train_min = torch.min(y_task_train.view(-1))
+    y_task_train += (torch.abs(y_task_train_min) + epsilon)
+
+    y_task_test_min = torch.min(y_task_test.view(-1))
+    y_task_test += (torch.abs(y_task_test_min) + epsilon)
 
     return x_task_train, y_task_train, x_task_test, y_task_test
 

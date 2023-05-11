@@ -27,6 +27,7 @@ from torch import nn
 
 from data_setup import build_tasks_set, build_task
 import engine
+import losses
 import model_builder
 import utils
 
@@ -54,6 +55,10 @@ def objective(trial, ht_config, data_config, data_filenames):
         'task_batch_size': ht_config['task_batch_size'],
         'sample_batch_size': ht_config['sample_batch_size'],
         'train_epochs': ht_config['train_epochs'],
+        'loss': ht_config['loss'],
+        'kappa': trial.suggest_float('kappa',
+                                     ht_config['kappa']['lower_bound'],
+                                     ht_config['kappa']['upper_bound']),
         'learning_rate': trial.suggest_float('learning_rate',
                                              float(ht_config['learning_rate']['lower_bound']),
                                              float(ht_config['learning_rate']['upper_bound']),
@@ -74,6 +79,8 @@ def objective(trial, ht_config, data_config, data_filenames):
     output_shape = data_config['week_num']*7*data_config['day_measurements']
     lstm_hidden_units = round(config['embedding_ratio']*output_shape)
     learning_rate = config['learning_rate']
+    loss = config['loss']
+    kappa = config['kappa']
 
     # Cross-validation splits - they should be random since we are splitting the tasks
     # (non-sequential) and not a single timeseries (sequential)
@@ -99,7 +106,7 @@ def objective(trial, ht_config, data_config, data_filenames):
                                                task_batch_size)
         network = model_builder.build_network(1, output_shape, lstm_hidden_units, device)
         optimizer = engine.build_optimizer(network, learning_rate)
-        loss_fn = nn.MSELoss()
+        loss_fn = losses.get_loss(loss, kappa)
 
         # Train model using the train tasks
         for epoch in range(num_epochs):
@@ -194,6 +201,8 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
         'max_epochs': ht_config['max_epochs'],
         'patience': ht_config['patience'],
         'min_delta': ht_config['min_delta'],
+        'loss': ht_config['loss'],
+        'kappa': best_trial['params_kappa'].values[0],
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'embedding_ratio': best_trial['params_embedding_ratio'].values[0]
     }
@@ -229,6 +238,8 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     lstm_hidden_units = round(opt_config['embedding_ratio']*output_shape)
     patience =  opt_config['patience']
     min_delta = opt_config['min_delta']
+    loss = opt_config['loss']
+    kappa = opt_config['kappa']
 
     # Split meta-train set to meta-train and meta-validation sets
     train_filenames, val_filenames = train_test_split(data_filenames,
@@ -252,7 +263,7 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                           device=device)
     optimizer = engine.build_optimizer(network, learning_rate)
     early_stopper = engine.build_early_stopper(network, patience, min_delta)
-    loss_fn = nn.MSELoss()
+    loss_fn = losses.get_loss(loss, kappa)
 
     train_losses = []
     val_losses = []
@@ -318,6 +329,8 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
     sample_batch_size = opt_config['sample_batch_size']
     output_shape = data_config['week_num']*7*data_config['day_measurements']
     lstm_hidden_units = round(opt_config['embedding_ratio']*output_shape)
+    loss = opt_config['loss']
+    kappa = opt_config['kappa']
     model_save_path = results_dir_name + 'optimal_trained_model.pth'
 
     # Create dataloader for the test tasks
@@ -332,7 +345,7 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
                                           device=device)
     network.load_state_dict(torch.load(f=model_save_path))
 
-    loss_fn = nn.MSELoss()
+    loss_fn = losses.get_loss(loss, kappa)
 
     test_loss = 0.0
 
@@ -469,13 +482,13 @@ def main():
                                              data_config,
                                              train_filenames,
                                              results_dir_name)
-    utils.plot_learning_curve(train_losses, val_losses, results_dir_name)
+    utils.plot_learning_curve(train_losses, val_losses, results_dir_name, opt_config['loss'])
 
     # Load optimal task-embedding model and evaluate it on test tasks
     test_loss = evaluate_optimal(opt_config,
-                     data_config,
-                     test_filenames,
-                     results_dir_name)
+                                 data_config,
+                                 test_filenames,
+                                 results_dir_name)
     print(f"Test loss: {test_loss}")
 
     # Get embeddings for train tasks
@@ -515,6 +528,26 @@ def main():
                                embedding_size,
                                results_dir_name,
                                config['tsne_perplexity'])
+
+    # train_tasks_dataloader = build_tasks_set(test_filenames,
+    #                                          data_config,
+    #                                          1)
+
+    # for train_task_data, timeseries_code in train_tasks_dataloader:
+    #     train_dataloader, test_dataloader = build_task(train_task_data,
+    #                                      1,
+    #                                      data_config)
+
+    #     # Original support set
+    #     true_output = get_full_train_set(test_dataloader)
+    #     true_output = true_output.view(-1)
+    #     true_output = pd.DataFrame(true_output.numpy())
+    #     true_output.rename(columns={0: 'Measurements'}, inplace=True)
+
+    #     true_output['Measurements'].plot.hist(bins=40)
+    #     plt.title(timeseries_code)
+    #     plt.show()
+
 
 if __name__ == "__main__":
     main()

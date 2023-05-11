@@ -15,6 +15,10 @@
     max_epochs: 100
     patience: 5
     min_delta: 0.0
+    loss: 'MSE'
+    kappa:
+      lower_bound: 1.5
+      upper_bound: 5.0
     learning_rate:
       lower_bound: 1e-5
       upper_bound: 1e-3

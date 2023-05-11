@@ -62,7 +62,7 @@ def save_model(network_state_dict, results_dir_name):
     torch.save(obj=network_state_dict, f=target_file)
 
 
-def plot_learning_curve(train_losses, test_losses, results_dir_name):
+def plot_learning_curve(train_losses, test_losses, results_dir_name, loss):
     """Plot the learning curve of the model during training.
 
     The plot contains the train loss and the test loss of the model for the number
@@ -72,13 +72,14 @@ def plot_learning_curve(train_losses, test_losses, results_dir_name):
         train_losses: A list that contains the train loss of each training epoch.
         test_losses: A list that contains the test loss of each training epoch.
         results_dir_name: A string with the name of the directory the results will be saved.
+        loss: A string that is the name of the loss function used.
     """
 
     plt.figure()
     plt.plot(train_losses, c='b', label='Train Loss')
     plt.plot(test_losses, c='r', label='Test Loss')
     plt.xlabel('Epoch')
-    plt.ylabel('MSE')
+    plt.ylabel(loss)
     plt.title('Learning curve of optimal model')
     plt.legend()
 
@@ -176,6 +177,3 @@ def visualize_embeddings(train_task_embeddings,
 
     target_file = results_dir_name + 'tsne.png'
     plt.savefig(target_file)
-
-
-# TODO: Create set_cuda_reproducibility function for the baselines too
