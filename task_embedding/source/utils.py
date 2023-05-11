@@ -9,6 +9,7 @@ import random
 
 import numpy as np
 from matplotlib import pyplot as plt
+import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import torch
@@ -109,6 +110,35 @@ def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
 
     target_file = results_dir_name + timeseries_code[0] + '_reconstruction.png'
     plt.savefig(target_file)
+
+
+def save_validation_logs(val_logs, target_dir):
+
+    # Sort logs
+    val_logs = val_logs.sort_values(by=['timeseries_code'])
+
+    target_file = target_dir + 'logs.csv'
+    val_logs.to_csv(target_file, index=False)
+
+
+def plot_distributions(y_true, y_pred, target_dir):
+
+        y_true = pd.DataFrame(y_true.numpy())
+        y_true.rename(columns={0: 'Measurements'}, inplace=True)
+
+        errors = y_pred - y_true
+        errors = pd.DataFrame(errors.numpy())
+        errors.rename(columns={0: 'Measurements'}, inplace=True)
+
+        y_true['Measurements'].plot.hist(bins=40)
+        plt.title('Distribution of time series values')
+        target_file = target_dir + 'values_distribution.png'
+        plt.savefig(target_file)
+
+        errors['Measurements'].plot.hist(bins=40)
+        plt.title('Distribution of reconstruction errors')
+        target_file = target_dir + 'errors_distribution.png'
+        plt.savefig(target_file)
 
 
 def visualize_embeddings(train_task_embeddings,

@@ -19,13 +19,13 @@ import os
 from time import time
 import yaml
 
+import pandas as pd
 from matplotlib import pyplot as plt
 import optuna
 from sklearn.model_selection import KFold, train_test_split
 import torch
-from torch import nn
 
-from data_setup import build_tasks_set, build_task
+from data_setup import build_tasks_set, build_task, get_full_train_set
 import engine
 import losses
 import model_builder
@@ -307,18 +307,25 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     return train_losses, val_losses
 
 
-def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
-    """Evaluate the trained optimal model on the meta-test set tasks.
+def evaluate_optimal(opt_config,
+                     data_config,
+                     data_filenames,
+                     task_set_type,
+                     results_dir_name):
+    # TODO: Update docstring
+    """Evaluate the trained optimal model on the given set of tasks.
 
     The optimal model that occured after training using the optimal hyperparameters is loaded
-    and then evaluated on each test task. The total test loss is calculated while for each task
+    and then evaluated on each given task. The total test loss is calculated while for each task
     prediction plots based on the reconstructions are created and saved.
 
     Args:
         opt_config: A dictionary that contains the optimal hyperparameters for the model.
         data_config: A dictionary that contains various user-configured values that define
             the splitting and preprocessing of the data.
-        test_filenames: A list of strings that contains the paths to the test tasks.
+        data_filenames: A list of strings that contains the paths to the tasks.
+        task_set_type: A string that defines the type of the given tasks set (meta-train
+            or meta-test).
         results_dir_name: A string with the name of the directory the results will be saved.
     Return:
         A float that is the mean reconstruction loss of the test tasks.
@@ -333,10 +340,15 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
     kappa = opt_config['kappa']
     model_save_path = results_dir_name + 'optimal_trained_model.pth'
 
-    # Create dataloader for the test tasks
-    test_tasks_dataloader = build_tasks_set(test_filenames,
-                                            data_config,
-                                            task_batch_size)
+    # Create subfolder for tasks' results
+    target_dir = results_dir_name + task_set_type + '_tasks/'
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+
+    # Create tasks set dataloader
+    tasks_dataloader = build_tasks_set(data_filenames,
+                                       data_config,
+                                       task_batch_size)
 
     # Load optimal model and define loss function
     network = model_builder.build_network(input_shape=1,
@@ -344,28 +356,52 @@ def evaluate_optimal(opt_config, data_config, test_filenames, results_dir_name):
                                           hidden_units=lstm_hidden_units,
                                           device=device)
     network.load_state_dict(torch.load(f=model_save_path))
-
     loss_fn = losses.get_loss(loss, kappa)
 
-    test_loss = 0.0
+    # DataFrame that holds the info about the inference in each task
+    task_logs = pd.DataFrame(columns=['timeseries_code', 'loss_type', 'loss_value', 'length'])
 
-    # Evaluation on each test task
-    for test_task_data, test_timeseries_code in test_tasks_dataloader:
-        test_dataloader, _ = build_task(test_task_data, sample_batch_size, data_config)
+    total_loss = 0.0
 
-        test_task_loss, y_preds, y_true = engine.evaluate_task(network,
-                                                               test_dataloader,
-                                                               loss_fn,
-                                                               device)
-        test_loss += test_task_loss
+    # Evaluation on each task
+    for task_data, timeseries_code in tasks_dataloader:
+        
+        # Create subdirectory for the specific task
+        target_dir = target_dir + timeseries_code[0] + '/'
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
 
-        # Create a pred plot for each test task
-        y_preds = torch.flatten(y_preds).tolist()
-        y_true = torch.flatten(y_true).tolist()
-        utils.plot_predictions(y_true, y_preds, results_dir_name, test_timeseries_code)
+        support_set_dataloader, _ = build_task(task_data, sample_batch_size, data_config)
 
-    test_loss /= len(test_tasks_dataloader)
-    return test_loss
+        task_loss, y_pred, y_true = engine.evaluate_task(network,
+                                                         support_set_dataloader,
+                                                         loss_fn,
+                                                         device)
+        total_loss += task_loss
+
+        # Logs for the task
+        task_log = pd.DataFrame({'timeseries_code': timeseries_code,
+                                 'loss_type': loss,
+                                 'loss_value': [task_loss],
+                                 'length': [7*data_config['week_num']*y_pred.shape[0]]})
+        task_logs = pd.concat([task_logs, task_log], ignore_index=True)
+
+        # Create a pred plot for each task
+        utils.plot_predictions(torch.flatten(y_true).tolist(),
+                               torch.flatten(y_pred).tolist(),
+                               results_dir_name,
+                               timeseries_code)
+        
+        # Create distribution plots for each task
+        utils.plot_distributions(torch.flatten(y_true),
+                                 torch.flatten(y_pred),
+                                 target_dir)
+
+    # Save logs as .csv file
+    utils.save_validation_logs(task_logs, target_dir, task_set_type)
+
+    total_loss /= len(tasks_dataloader)
+    return total_loss
 
 
 def embed_task_set(opt_config, data_config, data_filenames, results_dir_name):
@@ -484,12 +520,21 @@ def main():
                                              results_dir_name)
     utils.plot_learning_curve(train_losses, val_losses, results_dir_name, opt_config['loss'])
 
+    # Load optimal task-embedding model and evaluate it on train tasks
+    mean_train_loss = evaluate_optimal(opt_config,
+                                        data_config,
+                                        train_filenames,
+                                        'train',
+                                        results_dir_name)
+    print(f"Mean meta-train set loss: {mean_train_loss}")
+
     # Load optimal task-embedding model and evaluate it on test tasks
-    test_loss = evaluate_optimal(opt_config,
-                                 data_config,
-                                 test_filenames,
-                                 results_dir_name)
-    print(f"Test loss: {test_loss}")
+    mean_test_loss = evaluate_optimal(opt_config,
+                                      data_config,
+                                      test_filenames,
+                                      'test',
+                                      results_dir_name)
+    print(f"Mean meta-test set loss: {mean_test_loss}")
 
     # Get embeddings for train tasks
     embed_start = time()
@@ -529,25 +574,9 @@ def main():
                                results_dir_name,
                                config['tsne_perplexity'])
 
-    # train_tasks_dataloader = build_tasks_set(test_filenames,
-    #                                          data_config,
-    #                                          1)
-
-    # for train_task_data, timeseries_code in train_tasks_dataloader:
-    #     train_dataloader, test_dataloader = build_task(train_task_data,
-    #                                      1,
-    #                                      data_config)
-
-    #     # Original support set
-    #     true_output = get_full_train_set(test_dataloader)
-    #     true_output = true_output.view(-1)
-    #     true_output = pd.DataFrame(true_output.numpy())
-    #     true_output.rename(columns={0: 'Measurements'}, inplace=True)
-
-    #     true_output['Measurements'].plot.hist(bins=40)
-    #     plt.title(timeseries_code)
-    #     plt.show()
-
 
 if __name__ == "__main__":
     main()
+
+# TODO: Add documentation where missing
+# TODO: Test in mini_iONA
