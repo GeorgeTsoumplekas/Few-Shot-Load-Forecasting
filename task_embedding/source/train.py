@@ -25,7 +25,7 @@ import optuna
 from sklearn.model_selection import KFold, train_test_split
 import torch
 
-from data_setup import build_tasks_set, build_task, get_full_train_set
+from data_setup import build_tasks_set, build_task
 import engine
 import losses
 import model_builder
@@ -106,7 +106,7 @@ def objective(trial, ht_config, data_config, data_filenames):
                                                task_batch_size)
         network = model_builder.build_network(1, output_shape, lstm_hidden_units, device)
         optimizer = engine.build_optimizer(network, learning_rate)
-        loss_fn = losses.get_loss(loss, kappa)
+        loss_fn = losses.get_loss(loss, kappa, device)
 
         # Train model using the train tasks
         for epoch in range(num_epochs):
@@ -263,15 +263,13 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                           device=device)
     optimizer = engine.build_optimizer(network, learning_rate)
     early_stopper = engine.build_early_stopper(network, patience, min_delta)
-    loss_fn = losses.get_loss(loss, kappa)
+    loss_fn = losses.get_loss(loss, kappa, device)
 
     train_losses = []
     val_losses = []
 
     # Model training using training tasks / evaluation using validation tasks
-    print(f"Training optimal model.")
-    for epoch in range(num_epochs):
-        print(f"Epoch {epoch+1}|{num_epochs}")
+    for _ in range(num_epochs):
         epoch_start = time()
 
         # Train model
@@ -356,7 +354,7 @@ def evaluate_optimal(opt_config,
                                           hidden_units=lstm_hidden_units,
                                           device=device)
     network.load_state_dict(torch.load(f=model_save_path))
-    loss_fn = losses.get_loss(loss, kappa)
+    loss_fn = losses.get_loss(loss, kappa, device)
 
     # DataFrame that holds the info about the inference in each task
     task_logs = pd.DataFrame(columns=['timeseries_code', 'loss_type', 'loss_value', 'length'])
@@ -365,11 +363,11 @@ def evaluate_optimal(opt_config,
 
     # Evaluation on each task
     for task_data, timeseries_code in tasks_dataloader:
-        
+
         # Create subdirectory for the specific task
-        target_dir = target_dir + timeseries_code[0] + '/'
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir)
+        task_specific_dir = target_dir + timeseries_code[0] + '/'
+        if not os.path.exists(task_specific_dir):
+            os.makedirs(task_specific_dir)
 
         support_set_dataloader, _ = build_task(task_data, sample_batch_size, data_config)
 
@@ -389,16 +387,15 @@ def evaluate_optimal(opt_config,
         # Create a pred plot for each task
         utils.plot_predictions(torch.flatten(y_true).tolist(),
                                torch.flatten(y_pred).tolist(),
-                               results_dir_name,
-                               timeseries_code)
-        
+                               task_specific_dir)
+
         # Create distribution plots for each task
         utils.plot_distributions(torch.flatten(y_true),
                                  torch.flatten(y_pred),
-                                 target_dir)
+                                 task_specific_dir)
 
     # Save logs as .csv file
-    utils.save_validation_logs(task_logs, target_dir, task_set_type)
+    utils.save_validation_logs(task_logs, target_dir)
 
     total_loss /= len(tasks_dataloader)
     return total_loss
@@ -579,4 +576,3 @@ if __name__ == "__main__":
     main()
 
 # TODO: Add documentation where missing
-# TODO: Test in mini_iONA

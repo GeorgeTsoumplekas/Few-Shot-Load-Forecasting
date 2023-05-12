@@ -267,6 +267,7 @@ def build_task(task_data, sample_batch_size, data_config):
 
 
 def split_task(task_data, data_config):
+    # TODO: Update docstring
     """Ingest the raw time series and create the desired train and test sets.
 
     First, both input and output length are defined, as well as the size of the test set.

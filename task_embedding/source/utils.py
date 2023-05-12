@@ -88,7 +88,7 @@ def plot_learning_curve(train_losses, test_losses, results_dir_name, loss):
     plt.savefig(target_file)
 
 
-def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
+def plot_predictions(y_true, y_pred, target_dir):
     """Plot predicted vs true values of the given timeseries.
 
     Both true and predicted values are normalized and the plot is saved as a png file.
@@ -96,8 +96,7 @@ def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
     Args:
         y_true: A list that contains the true output values of the examined timeseries.
         y_pred: A list that contains the predicted output values of the examined timeseries.
-        results_dir_name: A string with the name of the directory the results will be saved.
-        timeseries_code: A list with a string that is the id of the examined timeseries.
+        target_dir: A string with the name of the directory the results will be saved.
     """
 
     plt.figure()
@@ -108,11 +107,14 @@ def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
     plt.title('Model predictions vs true values on test set')
     plt.legend()
 
-    target_file = results_dir_name + timeseries_code[0] + '_reconstruction.png'
+    target_file = target_dir + 'reconstruction.png'
     plt.savefig(target_file)
 
 
 def save_validation_logs(val_logs, target_dir):
+    """
+    
+    """
 
     # Sort logs
     val_logs = val_logs.sort_values(by=['timeseries_code'])
@@ -122,23 +124,29 @@ def save_validation_logs(val_logs, target_dir):
 
 
 def plot_distributions(y_true, y_pred, target_dir):
+    """
+    
+    """
 
-        y_true = pd.DataFrame(y_true.numpy())
-        y_true.rename(columns={0: 'Measurements'}, inplace=True)
+    errors = y_pred - y_true
 
-        errors = y_pred - y_true
-        errors = pd.DataFrame(errors.numpy())
-        errors.rename(columns={0: 'Measurements'}, inplace=True)
+    y_true = pd.DataFrame(y_true.cpu().numpy())
+    y_true.rename(columns={0: 'Measurements'}, inplace=True)
 
-        y_true['Measurements'].plot.hist(bins=40)
-        plt.title('Distribution of time series values')
-        target_file = target_dir + 'values_distribution.png'
-        plt.savefig(target_file)
+    errors = pd.DataFrame(errors.cpu().numpy())
+    errors.rename(columns={0: 'Measurements'}, inplace=True)
 
-        errors['Measurements'].plot.hist(bins=40)
-        plt.title('Distribution of reconstruction errors')
-        target_file = target_dir + 'errors_distribution.png'
-        plt.savefig(target_file)
+    plt.figure()
+    y_true['Measurements'].plot.hist(bins=40)
+    plt.title('Distribution of time series values')
+    target_file = target_dir + 'values_distribution.png'
+    plt.savefig(target_file)
+
+    plt.figure()
+    errors['Measurements'].plot.hist(bins=40)
+    plt.title('Distribution of reconstruction errors')
+    target_file = target_dir + 'errors_distribution.png'
+    plt.savefig(target_file)
 
 
 def visualize_embeddings(train_task_embeddings,
