@@ -310,12 +310,12 @@ def evaluate_optimal(opt_config,
                      data_filenames,
                      task_set_type,
                      results_dir_name):
-    # TODO: Update docstring
     """Evaluate the trained optimal model on the given set of tasks.
 
     The optimal model that occured after training using the optimal hyperparameters is loaded
-    and then evaluated on each given task. The total test loss is calculated while for each task
-    prediction plots based on the reconstructions are created and saved.
+    and then evaluated on each given task. For each task, logs regarding its evaluation are created
+    as well as prediction plots and distribution plots of the time series and the prediction's
+    errors. Finally, the total set loss is calculated.
 
     Args:
         opt_config: A dictionary that contains the optimal hyperparameters for the model.
@@ -574,5 +574,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# TODO: Add documentation where missing

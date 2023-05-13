@@ -112,11 +112,14 @@ def plot_predictions(y_true, y_pred, target_dir):
 
 
 def save_validation_logs(val_logs, target_dir):
-    """
-    
+    """Save the validation logs as a .csv file.
+
+    Args:
+        val_logs: A pnadas DataFrame that contains the logs for each evaluated task.
+        target_dir: A string with the name of the directory the results will be saved.
     """
 
-    # Sort logs
+    # Sort logs based on the time series code
     val_logs = val_logs.sort_values(by=['timeseries_code'])
 
     target_file = target_dir + 'logs.csv'
@@ -124,8 +127,15 @@ def save_validation_logs(val_logs, target_dir):
 
 
 def plot_distributions(y_true, y_pred, target_dir):
-    """
-    
+    """ Plot timeseries' values and prediction's errors distributions.
+
+    The task time series and the errors time series are transformed to pandas DataFrames and the
+    corrsponding histograms are plotted and saved as .png files.
+
+    Args:
+        y_true: A torch tensor that contains the true output values of the examined timeseries.
+        y_pred: A torch tensor that contains the predicted output values of the examined timeseries.
+        target_dir: A string with the name of the directory the results will be saved.
     """
 
     errors = y_pred - y_true

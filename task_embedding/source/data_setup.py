@@ -267,7 +267,6 @@ def build_task(task_data, sample_batch_size, data_config):
 
 
 def split_task(task_data, data_config):
-    # TODO: Update docstring
     """Ingest the raw time series and create the desired train and test sets.
 
     First, both input and output length are defined, as well as the size of the test set.
@@ -275,8 +274,8 @@ def split_task(task_data, data_config):
     the training set. Then both of these sets are split into subsequences: the subsequences of
     the training set are non-overlapping, while the subsequences on the test set are overlapping
     based on rolling window that each time rolls by the size of the output subsequence (see the
-    report for more details and diagrams of the process). Finally, the subsequences are normalized
-    and transformed into torch tensors.
+    report for more details and diagrams of the process). Finally, the subsequences are normalized,
+    shifted to be positive and transformed into torch tensors.
 
     Args:
         task_data: A torch.Tensor that contains the time series of the task.
