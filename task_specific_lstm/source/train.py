@@ -18,12 +18,13 @@ import yaml
 
 from matplotlib import pyplot as plt
 import optuna
+import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 import torch
-from torch import nn
 
 import data_setup
 import engine
+import losses
 import model_builder
 import utils
 
@@ -52,6 +53,10 @@ def objective(trial, x_train, y_train, ht_config):
         'scheduler_factor': ht_config['scheduler_factor'],
         'scheduler_patience': int(ht_config['scheduler_patience']),
         'scheduler_threshold': float(ht_config['scheduler_threshold']),
+        'loss': ht_config['loss'],
+        'kappa': trial.suggest_float('kappa',
+                                     ht_config['kappa']['lower_bound'],
+                                     ht_config['kappa']['upper_bound']),
         'learning_rate': trial.suggest_float('learning_rate',
                                              float(ht_config['learning_rate']['lower_bound']),
                                              float(ht_config['learning_rate']['upper_bound']),
@@ -78,6 +83,8 @@ def objective(trial, x_train, y_train, ht_config):
     scheduler_factor = config['scheduler_factor']
     scheduler_patience = config['scheduler_patience']
     scheduler_threshold = config['scheduler_threshold']
+    loss = config['loss']
+    kappa = config['kappa']
 
     results = {}  # Contains the validation loss of each fold
 
@@ -103,7 +110,7 @@ def objective(trial, x_train, y_train, ht_config):
                                            scheduler_factor,
                                            scheduler_patience,
                                            scheduler_threshold)
-        loss_fn = nn.MSELoss()
+        loss_fn = losses.get_loss(loss, kappa, device)
 
         # Training loop
         for _ in range(num_epochs):
@@ -123,12 +130,13 @@ def objective(trial, x_train, y_train, ht_config):
     return mean_val_loss
 
 
-def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name):
+def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, results_dir_name):
     """Training loop of the optimal model.
 
     The model is trained based on the optimal hyperparameters determined from the previously
     done hyperparameter tuning. The train and test losses are calculated for each epoch and
-    after training is done, the optimal model is saved.
+    after training is done, as well as a number of different metrics and the optimal model
+    is saved.
 
     Args:
         opt_config: A dictionary that contains the optimal hyperparameter values.
@@ -136,6 +144,7 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name
         y_train: A torch.Tensor that contains the output values of the training set.
         x_test: A torch.Tensor that contains the input features of the test set.
         y_test: A torch.Tensor that contains the output values of the test set.
+        y_test_raw: A torch.Tensor that contains the unstandardized output values of the test set.
         results_dir_name: A string with the name of the directory the results will be saved.
     Returns:
         Two dictionaries, one that contains the training loss and one that contains the test loss
@@ -154,6 +163,8 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name
     scheduler_factor = opt_config['scheduler_factor']
     scheduler_patience = opt_config['scheduler_patience']
     scheduler_threshold = opt_config['scheduler_threshold']
+    loss = opt_config['loss']
+    kappa = opt_config['kappa']
 
     # Get the dataloaders, model, optimizer, scheduler and loss function
     train_dataloader, test_dataloader = data_setup.build_dataset(x_train,
@@ -167,7 +178,7 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name
                                        scheduler_factor,
                                        scheduler_patience,
                                        scheduler_threshold)
-    loss_fn = nn.MSELoss()
+    loss_fn = losses.get_loss(loss, kappa, device)
 
     # Train and test losses on each epoch
     train_losses = {}
@@ -189,8 +200,20 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, results_dir_name
     _, y_preds = engine.evaluate(network, test_dataloader, loss_fn, device)
     utils.plot_predictions(y_test, y_preds, results_dir_name)
 
+    # MAPE calculation on original scale
+    y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), results_dir_name)
+    mape = losses.MAPE(y_preds_raw, y_test_raw)
+
     # Save optimal model
     utils.save_optimal_model(network, results_dir_name)
+
+    task_log = pd.DataFrame({'loss_type': loss,
+                              'loss_value': [test_losses[num_epochs-1]],
+                              'length': [len(train_dataloader)*7],
+                              'MAPE': [mape]})
+
+    # Save logs as .csv file
+    utils.save_validation_logs(task_log, results_dir_name)
 
     return train_losses, test_losses
 
@@ -253,7 +276,9 @@ def hyperparameter_tuning(n_trials, results_dir_name, x_train, y_train, ht_confi
         'scheduler_threshold': float(ht_config['scheduler_threshold']),
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'epochs': best_trial['params_epochs'].values[0],
-        'lstm_hidden_units': best_trial['params_lstm_hidden_units'].values[0]
+        'lstm_hidden_units': best_trial['params_lstm_hidden_units'].values[0],
+        'loss': ht_config['loss'],
+        'kappa': best_trial['params_kappa'].values[0],
     }
 
     return opt_config
@@ -291,8 +316,11 @@ def main():
 
     # Data loading and processing
     data = data_setup.load_timeseries(raw_series_filepath)
-    x_train, y_train, x_test, y_test = data_setup.split_train_test(data,
-        config['data_split_constants'])
+    x_train, y_train, x_test, y_test, y_test_raw = data_setup.split_train_test(
+        data,
+        config['data_split_constants'],
+        results_dir_name
+    )
 
     # Hyperparameter tuning
     n_trials = config['n_trials']
@@ -306,6 +334,7 @@ def main():
                                               y_train,
                                               x_test,
                                               y_test,
+                                              y_test_raw,
                                               results_dir_name)
 
     # Additional visualizations

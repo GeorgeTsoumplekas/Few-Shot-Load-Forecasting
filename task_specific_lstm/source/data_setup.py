@@ -8,7 +8,6 @@ Dataset class is defined.
 
 import os
 
-import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -82,16 +81,42 @@ def load_timeseries(filename):
     Args:
         filename: A string which defines the path to the desired time series file.
     Returns:
-        A numpy.ndarray that contains the raw time series.
+        A torch tensor that contains the raw time series.
     """
 
     series = pd.read_csv(filename)
-    data = series['Measurements'].to_numpy()
+    data = torch.tensor(series['Measurements'].to_numpy(), dtype=torch.float32)
 
     return data
 
 
-def split_train_test(data, data_split_constants):
+def save_standardization_settings(train_mean, train_std, epsilon, y_test_min, results_dir_name):
+    """Save variables used in transforming the raw data as a .csv file.
+
+    This is necessary for re-transforming the data back to its original scale later.
+
+    Args:
+        train_mean: A torch tensor that contains the mean value of the train set's input
+            subsequences.
+        train_std: A torch tensor that contains the standard deviation value of the train set's
+            input subsequences.
+        epsilon: A float that is the distance of minimum sample value in the test set output
+            subsequences from 0.
+        y_test_min: A torch tensor that contains the minimum value in the output subsequences of
+            the test set.
+        results_dir_name: A string with the name of the directory the results will be saved.
+    """
+
+    standardization_settings = pd.DataFrame({'train_mean': [train_mean.item()],
+                  'train_std': [train_std.item()],
+                  'epsilon': [epsilon],
+                  'y_test_min': [y_test_min.item()]})
+
+    filepath = results_dir_name + 'settings.csv'
+    standardization_settings.to_csv(filepath, index=False)
+
+
+def split_train_test(data, data_split_constants, results_dir_name):
     """Ingest the raw time series and create the desired train and test sets.
 
     First, both input and output length are defined, as well as the size of the test set.
@@ -106,15 +131,17 @@ def split_train_test(data, data_split_constants):
         data: A numpy.ndarray that contains the raw time series.
         data_split_constants: A dictionary with values that control correct splitting of the data
             such as the size of the train/test sets and the length of input/output subsequences.
+        results_dir_name: A string with the name of the directory the results will be saved.
     Returns:
         A tuple that contains the input and output subsequences of the training and test sets as
-        torch Tensors.
+        torch Tensors as well as as the output subsequences of the test set unstandardized.
     """
 
     timestep = data_split_constants['timestep']  # Minutes between measurements
     week_num = data_split_constants['week_num']  # Number of weeks in the input subsequence
     pred_days = data_split_constants['pred_days']  # Output subsequence length in days
     test_days = data_split_constants['test_days']  # Test set size in days
+    epsilon = data_split_constants['epsilon']  # Distance of minimum sample value from 0
 
     # Number of days in each input subsequence
     x_seq_days = week_num*7
@@ -128,10 +155,10 @@ def split_train_test(data, data_split_constants):
     # Number of measurements in each output subsequence
     y_seq_measurements = day_measurements*pred_days
 
-    x_train = np.empty((0, x_seq_measurements))
-    x_test = np.empty((0, x_seq_measurements))
-    y_train = np.empty((0, y_seq_measurements))
-    y_test = np.empty((0, y_seq_measurements))
+    x_train = torch.empty((0, x_seq_measurements))
+    x_test = torch.empty((0, x_seq_measurements))
+    y_train = torch.empty((0, y_seq_measurements))
+    y_test = torch.empty((0, y_seq_measurements))
 
     total_days = len(data)//day_measurements
 
@@ -145,16 +172,19 @@ def split_train_test(data, data_split_constants):
         x_slice = data[i*x_seq_measurements:(i+1)*x_seq_measurements]
         y_slice = data[(i+1)*x_seq_measurements:(i+1)*x_seq_measurements+y_seq_measurements]
 
-        x_train = np.vstack((x_train, x_slice))
-        y_train = np.vstack((y_train, y_slice))
+        x_train = torch.vstack((x_train, x_slice))
+        y_train = torch.vstack((y_train, y_slice))
 
     for i in range(test_days):
         x_slice = data[len(data)-x_seq_measurements-y_seq_measurements-(test_days-i)+1:
                         len(data)-y_seq_measurements-(test_days-i)+1]
         y_slice = data[len(data)-y_seq_measurements-(test_days-i)+1:len(data)-(test_days-i)+1]
 
-        x_test = np.vstack((x_test, x_slice))
-        y_test = np.vstack((y_test, y_slice))
+        x_test = torch.vstack((x_test, x_slice))
+        y_test = torch.vstack((y_test, y_slice))
+
+    # Unstandardized version of y_test
+    y_test_raw = y_test
 
     # Normalize using the mean and std of the training set (to avoid data leakage)
     train_mean = x_train.reshape((-1,)).mean()
@@ -166,9 +196,52 @@ def split_train_test(data, data_split_constants):
     x_test = (x_test - train_mean) / train_std
     y_test = (y_test - train_mean) / train_std
 
-    x_train = torch.from_numpy(x_train).to(torch.float32)
-    x_test = torch.from_numpy(x_test).to(torch.float32)
-    y_train = torch.from_numpy(y_train).to(torch.float32)
-    y_test = torch.from_numpy(y_test).to(torch.float32)
+    # Shift subsequences to be positive (to avoid division with zero when calculating the
+    # log likelihood gamma regression loss function)
+    x_train_min = torch.min(x_train.view(-1))
+    x_train += (torch.abs(x_train_min) + epsilon)
 
-    return x_train, y_train, x_test, y_test
+    x_test_min = torch.min(x_test.view(-1))
+    x_test += (torch.abs(x_test_min) + epsilon)
+
+    y_train_min = torch.min(y_train.view(-1))
+    y_train += (torch.abs(y_train_min) + epsilon)
+
+    y_test_min = torch.min(y_test.view(-1))
+    y_test += (torch.abs(y_test_min) + epsilon)
+
+    # Will be useful later for de-standardization
+    save_standardization_settings(train_mean,
+                                  train_std,
+                                  epsilon,
+                                  torch.abs(y_test_min),
+                                  results_dir_name)
+
+    return x_train, y_train, x_test, y_test, y_test_raw
+
+
+def unstandardized_preds(y_pred, results_dir_name):
+    """Transform standardized data back to original scale.
+
+    The process includes doing the inverse transformations of the ones used during data preprocessing.
+    That is, the data is shifted back to its original place and de-standardized.
+
+    Args:
+        y_pred: A torch tensor that contains the model predictions.
+        results_dir_name: A string with the name of the directory the transformation settings
+            are saved.
+    Returns:
+        A torch tensors that contains the predictions in the original scale.
+    """
+
+    settings_filepath = results_dir_name + 'settings.csv'
+    settings = pd.read_csv(settings_filepath)
+
+    # Shift back to 0
+    y_pred_raw = y_pred - (settings['epsilon'][0] + settings['y_test_min'][0])
+
+    # De-standardize
+    y_pred_raw *= settings['train_std'][0]
+    y_pred_raw += settings['train_mean'][0]
+
+    return y_pred

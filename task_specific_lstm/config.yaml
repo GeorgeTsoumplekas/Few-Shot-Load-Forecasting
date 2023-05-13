@@ -4,6 +4,7 @@
     week_num: 1
     pred_days: 1
     test_days: 7
+    epsilon: 0.1
  n_trials: 15
  ht_config:
     k_folds: 5
@@ -12,6 +13,10 @@
     scheduler_factor: 0.1
     scheduler_patience: 2
     scheduler_threshold: 1e-2
+    loss: 'MSE'
+    kappa:
+      lower_bound: 1.5
+      upper_bound: 5.0
     learning_rate:
       lower_bound: 5e-4
       upper_bound: 5e-2

@@ -49,6 +49,18 @@ def save_optimal_model(network, results_dir_name):
     torch.save(obj=network.state_dict(), f=target_file)
 
 
+def save_validation_logs(val_logs, results_dir_name):
+    """Save the validation logs as a .csv file.
+
+    Args:
+        val_logs: A pandas DataFrame that contains the logs for the evaluated task.
+        results_dir_name: A string with the name of the directory the results will be saved.
+    """
+
+    target_file = results_dir_name + 'logs.csv'
+    val_logs.to_csv(target_file, index=False)
+
+
 def plot_learning_curve(train_losses, test_losses,results_dir_name):
     """Plot the learning curve of the desired model.
 
