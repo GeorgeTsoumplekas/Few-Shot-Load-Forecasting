@@ -135,8 +135,8 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
 
     The model is trained based on the optimal hyperparameters determined from the previously
     done hyperparameter tuning. The train and test losses are calculated for each epoch and
-    after training is done, as well as a number of different metrics and the optimal model
-    is saved.
+    after training is done  a number of different metrics as well as the optimal model
+    are saved.
 
     Args:
         opt_config: A dictionary that contains the optimal hyperparameter values.
@@ -146,9 +146,6 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
         y_test: A torch.Tensor that contains the output values of the test set.
         y_test_raw: A torch.Tensor that contains the unstandardized output values of the test set.
         results_dir_name: A string with the name of the directory the results will be saved.
-    Returns:
-        Two dictionaries, one that contains the training loss and one that contains the test loss
-        of each training epoch.
     """
 
     # Set random seed for reproducibility purposes
@@ -215,7 +212,8 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
     # Save logs as .csv file
     utils.save_validation_logs(task_log, results_dir_name)
 
-    return train_losses, test_losses
+    # Learning curve plot
+    utils.plot_learning_curve(train_losses, test_losses, results_dir_name, loss)
 
 
 def hyperparameter_tuning(n_trials, results_dir_name, x_train, y_train, ht_config):
@@ -329,16 +327,7 @@ def main():
     opt_config = hyperparameter_tuning(n_trials, results_dir_name, x_train, y_train, ht_config)
 
     # Optimal model training and evaluation
-    train_losses, test_losses = train_optimal(opt_config,
-                                              x_train,
-                                              y_train,
-                                              x_test,
-                                              y_test,
-                                              y_test_raw,
-                                              results_dir_name)
-
-    # Additional visualizations
-    utils.plot_learning_curve(train_losses, test_losses, results_dir_name)
+    train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, results_dir_name)
 
 
 if __name__ == "__main__":

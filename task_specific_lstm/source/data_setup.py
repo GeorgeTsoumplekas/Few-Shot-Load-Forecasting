@@ -223,8 +223,8 @@ def split_train_test(data, data_split_constants, results_dir_name):
 def unstandardized_preds(y_pred, results_dir_name):
     """Transform standardized data back to original scale.
 
-    The process includes doing the inverse transformations of the ones used during data preprocessing.
-    That is, the data is shifted back to its original place and de-standardized.
+    The process includes doing the inverse transformations of the ones used during data
+    preprocessing. That is, the data is shifted back to its original place and de-standardized.
 
     Args:
         y_pred: A torch tensor that contains the model predictions.

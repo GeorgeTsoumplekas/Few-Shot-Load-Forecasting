@@ -61,7 +61,7 @@ def save_validation_logs(val_logs, results_dir_name):
     val_logs.to_csv(target_file, index=False)
 
 
-def plot_learning_curve(train_losses, test_losses,results_dir_name):
+def plot_learning_curve(train_losses, test_losses,results_dir_name, loss):
     """Plot the learning curve of the desired model.
 
     The plot contains the train loss and the test loss of the model for the number
@@ -71,13 +71,14 @@ def plot_learning_curve(train_losses, test_losses,results_dir_name):
         train_losses: A dictionary that contains the train loss of each training epoch.
         test_losses: A dictionary that contains the test loss of each training epoch.
         results_dir_name: A string with the name of the directory the results will be saved.
+        loss: A string that is the name of the loss function used.
     """
 
     plt.figure()
     plt.plot(list(train_losses.values()), c='b', label='Train Loss')
     plt.plot(list(test_losses.values()), c='r', label='Test Loss')
     plt.xlabel('Epoch')
-    plt.ylabel('MSE')
+    plt.ylabel(loss)
     plt.title('Learning curve of optimal model')
     plt.legend()
 
