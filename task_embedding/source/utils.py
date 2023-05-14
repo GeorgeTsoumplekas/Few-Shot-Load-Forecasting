@@ -115,7 +115,7 @@ def save_validation_logs(val_logs, target_dir):
     """Save the validation logs as a .csv file.
 
     Args:
-        val_logs: A pnadas DataFrame that contains the logs for each evaluated task.
+        val_logs: A pandas DataFrame that contains the logs for each evaluated task.
         target_dir: A string with the name of the directory the results will be saved.
     """
 

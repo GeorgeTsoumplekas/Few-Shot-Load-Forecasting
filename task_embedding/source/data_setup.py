@@ -289,7 +289,7 @@ def split_task(task_data, data_config):
     week_num = data_config['week_num']
     pred_days = data_config['pred_days']
     test_days = data_config['test_days']
-    epsilon = 0.1
+    epsilon = data_config['epsilon']
 
     # Number of days in each input subsequence
     x_seq_days = week_num*7

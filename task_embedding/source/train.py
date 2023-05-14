@@ -13,6 +13,8 @@ python3 train.py --train_dir "path/to/train_dir" \
                  --config "path/to/config.yaml"
 """
 
+#!/usr/bin/env python3
+
 import argparse
 import json
 import os

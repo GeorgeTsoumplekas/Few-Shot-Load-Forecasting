@@ -4,6 +4,7 @@
     week_num: 1
     pred_days: 1
     test_days: 7
+    epsilon: 0.1
  tsne_perplexity: 10.0
  n_trials: 10
  seed: 42
