@@ -341,7 +341,7 @@ def save_standardization_settings(train_mean,
 def split_train_task(task_data, data_config):
     """Ingest the raw time series and create the desired training set.
 
-    First, both input and output length are definedand based on that the number of training
+    First, both input and output length are defined and based on that the number of training
     subsequences is calculated. Then the whole time series is split into non-overlapping
     subsequences, which are normalized and shifted to be positive.
     Note that there is no test set in a training task so all time series is used for training.

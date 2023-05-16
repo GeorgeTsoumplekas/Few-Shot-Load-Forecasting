@@ -61,7 +61,9 @@ def main():
         'num_levels': 4,
         'num_centers': [1, 4 ,2, 1],
         'sigma': 2.0,
-        'embedding_size': 134
+        'embedding_size': 134,
+        'loss': 'MSE',
+        'kappa': 2.0
     }
 
     data_config = {

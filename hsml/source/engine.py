@@ -33,6 +33,8 @@ class MetaLearner(nn.Module):
         self.num_centers = args['num_centers']
         self.sigma = args['sigma']
         self.embedding_size = args['embedding_size']
+        self.loss = args['loss']
+        self.kappa = args['kappa']
 
         # Base Learner
         self.network = model_builder.build_base_network(input_shape=1,
@@ -40,29 +42,30 @@ class MetaLearner(nn.Module):
                                                         hidden_units=self.lstm_hidden_units,
                                                         device=self.device)
 
+        self.inner_loop_optimizer = optimizers.build_LSLR_optimizer(
+            self.device,
+            self.num_inner_steps,
+            True,
+            self.init_learning_rate
+        )
+
+        # Keeps the true weights of the base model (not the copied ones used during the inner
+        # loop optimization)
+        self.names_weights = self.get_inner_loop_params(state_dict=self.network.state_dict(),
+                                                        is_copy=False)
+        
+        self.total_inner_loop_params = self.get_inner_loop_params_number()
+        print("Base Network Parameters")
+        for name, key in self.names_weights.items():
+            print(name, key.shape, np.prod(key.shape))
+        print(f"Total Inner Loop Parameters: {self.total_inner_loop_params}")
+        
         # Hierarchical Clustering Component
         self.clustering = model_builder.build_cluster_network(num_levels=self.num_levels,
                                                               num_centers=self.num_centers,
                                                               sigma=self.sigma,
                                                               embedding_size=self.embedding_size,
                                                               device=self.device)
-
-        self.inner_loop_optimizer = optimizers.build_LSLR_optimizer(
-            self.device,
-            self.num_inner_steps,
-            True,
-            self.init_learning_rate)
-
-        # Keeps the true weights of the base model (not the copied ones used during the inner
-        # loop optimization)
-        self.names_weights = self.get_inner_loop_params(state_dict=self.network.state_dict(),
-                                                        is_copy=False)
-
-        self.total_inner_loop_params = self.get_inner_loop_params_number()
-        print("Base Network Parameters")
-        for name, key in self.names_weights.items():
-            print(name, key.shape, np.prod(key.shape))
-        print(f"Total Inner Loop Parameters: {self.total_inner_loop_params}")
 
         # Parameter Gate
         self.parameter_gate = model_builder.build_parameter_gate(
@@ -100,7 +103,7 @@ class MetaLearner(nn.Module):
             num_epochs=self.num_epochs,
             eta_min=self.eta_min
             )
-        
+
         print("\nOuter Loop Parameters")
         num_outer_loop_parameters = 0
         outer_loop_parameters = self.named_params()
@@ -135,7 +138,7 @@ class MetaLearner(nn.Module):
                 names_weights[name] = nn.Parameter(param)
 
         return names_weights
-    
+
 
     def get_inner_loop_params_number(self):
 
@@ -145,7 +148,7 @@ class MetaLearner(nn.Module):
             total_inner_loop_params += np.prod(param.shape)
 
         return total_inner_loop_params
-    
+
 
     def trainable_parameters(self):
 
@@ -171,7 +174,7 @@ class MetaLearner(nn.Module):
             if param.requires_grad:
                 yield param
 
-    
+
     def named_params(self):
 
         params = {}
@@ -193,10 +196,63 @@ class MetaLearner(nn.Module):
             params[name] = param
 
         return params
-    
 
-    def meta_train(self, data_filenames, optimal_mode):
+
+    def apply_weights_mask(self, names_weights_copy, weights_mask):
+        # TODO
         pass
+
+
+    def meta_train(self, data_filenames, embeddings, optimal_mode):
+
+        # Create dataloader for the training tasks
+        train_tasks_dataloader = data_setup.build_tasks_set(data_filenames,
+                                                            self.data_config,
+                                                            self.task_batch_size,
+                                                            embeddings)
+        
+        # Metrics calculated only when meta-training the optimal model
+        if optimal_mode:
+            epoch_losses = {}
+            train_losses = None
+            epoch_mean_support_losses = []
+            epoch_mean_query_losses = []
+
+        # Meta-Train loop
+        for epoch in range(self.num_epochs):
+            epoch = int(epoch)
+
+            use_second_order = self.second_order and (epoch < self.second_to_first_order_epoch)
+            total_losses = []
+
+            self.train()
+
+            # Iterate through every task in the train tasks set
+            for train_task_data, _, train_task_embedding in train_tasks_dataloader:
+
+                # Create support and query sets dataloaders
+                train_dataloader, test_dataloader, _ = data_setup.build_task(
+                    task_data=train_task_data,
+                    sample_batch_size=self.sample_batch_size,
+                    data_config=self.data_config
+                )
+
+                # Compute h_i using HierarchicalClustering module
+                train_task_cluster_embedding = self.clustering(train_task_embedding)
+
+                # Compute o_i using the ParameterGate module
+                weights_mask = self.parameter_gate(train_task_embedding, train_task_cluster_embedding)
+
+                # Get a copy of the inner loop parameters
+                names_weights_copy = self.get_inner_loop_params(state_dict=self.names_weights,
+                                                                is_copy=True)
+
+                # Update initial inner loop parameters for this task based on o_i
+                names_weights_masked = self.apply_weights_mask(names_weights_copy, weights_mask)
+
+                # MAML as we know
+
+                task_query_losses = []
 
 
     def meta_test(self, data_filenames, optimal_mode, results_dir_name=None):
