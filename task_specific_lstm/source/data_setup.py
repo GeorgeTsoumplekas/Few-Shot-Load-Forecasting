@@ -125,10 +125,10 @@ def split_train_test(data, data_split_constants, results_dir_name):
     the training set are non-overlapping, while the subsequences on the test set are overlapping
     based on rolling window that each time rolls by the size of the output subsequence (see the
     report for more details and diagrams of the process). Finally, the subsequences are normalized
-    and transformed into torch tensors.
+    and shifted to be positive.
 
     Args:
-        data: A numpy.ndarray that contains the raw time series.
+        data: A torch tensor that contains the raw time series.
         data_split_constants: A dictionary with values that control correct splitting of the data
             such as the size of the train/test sets and the length of input/output subsequences.
         results_dir_name: A string with the name of the directory the results will be saved.

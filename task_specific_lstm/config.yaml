@@ -5,9 +5,9 @@
     pred_days: 1
     test_days: 7
     epsilon: 0.1
- n_trials: 15
+ n_trials: 10
  ht_config:
-    k_folds: 5
+    k_folds: 3
     batch_size: 1
     seed: 42
     scheduler_factor: 0.1
@@ -23,7 +23,7 @@
       log: true
     epochs:
       lower_bound: 5
-      upper_bound: 20
+      upper_bound: 30
     lstm_hidden_units:
       lower_bound: 8
       upper_bound: 64
