@@ -231,7 +231,7 @@ def build_tasks_set(data_filenames, data_config, task_batch_size):
     return tasks_dataloader
 
 
-def build_task(task_data, sample_batch_size, data_config):
+def build_task(task_data, sample_batch_size, data_config, target_dir_name=None):
     """Create the dataloader that handles a specific task.
 
     The time series that corresponds to the task is initially split to input/output subsequences
@@ -242,14 +242,20 @@ def build_task(task_data, sample_batch_size, data_config):
         task_data: A torch.Tensor that corresponds to the time series of the task.
         sample_batch_size: An integer that is the number of subsequences in each batch.
         data_config: A dictionary that contains various user-configured values.
+        target_dir_name: A string with the name of the directory the results will be saved.
     Returns:
-        Two torch DataLoader objects, one for the training and one for the test set of the task.
+        Two torch DataLoader objects, one for the training and one for the test set of the task
+        as well as as the output subsequences of the query set unstandardized.
     """
 
     task_data = task_data.squeeze()
 
     # Both training and test subsequences are created in test tasks.
-    x_task_train, y_task_train, x_task_test, y_task_test = split_task(task_data, data_config)
+    x_task_train, y_task_train, x_task_test, y_task_test, y_task_test_raw = split_task(
+        task_data,
+        data_config,
+        target_dir_name
+    )
 
     train_dataset = TaskSpecificDataset(x_task_train, y_task_train)
     test_dataset = TaskSpecificDataset(x_task_test, y_task_test)
@@ -263,10 +269,40 @@ def build_task(task_data, sample_batch_size, data_config):
                                  num_workers=os.cpu_count(),  # Use all cpus available
                                  shuffle=False)  # Sequential data, so no shuffling
 
-    return train_dataloader, test_dataloader
+    return train_dataloader, test_dataloader, y_task_test_raw
 
 
-def split_task(task_data, data_config):
+def save_standardization_settings(train_mean,
+                                  train_std,
+                                  epsilon,
+                                  y_task_test_min,
+                                  target_dir_name):
+    """Save variables used in transforming the raw data as a .csv file.
+
+    This is necessary for re-transforming the data back to its original scale later.
+
+    Args:
+        train_mean: A torch tensor that contains the mean value of the train set's input
+            subsequences.
+        train_std: A torch tensor that contains the standard deviation value of the train set's
+            input subsequences.
+        epsilon: A float that is the distance of minimum sample value in the test set output
+            subsequences from 0.
+        y_test_min: A torch tensor that contains the minimum value in the output subsequences of
+            the test set.
+        target_dir_name: A string with the name of the directory the results will be saved.
+    """
+
+    standardization_settings = pd.DataFrame({'train_mean': [train_mean.item()],
+                  'train_std': [train_std.item()],
+                  'epsilon': [epsilon],
+                  'y_test_min': [y_task_test_min.item()]})
+
+    filepath = target_dir_name + 'settings.csv'
+    standardization_settings.to_csv(filepath, index=False)
+
+
+def split_task(task_data, data_config, target_dir_name):
     """Ingest the raw time series and create the desired train and test sets.
 
     First, both input and output length are defined, as well as the size of the test set.
@@ -275,7 +311,7 @@ def split_task(task_data, data_config):
     the training set are non-overlapping, while the subsequences on the test set are overlapping
     based on rolling window that each time rolls by the size of the output subsequence (see the
     report for more details and diagrams of the process). Finally, the subsequences are normalized
-    and transformed into torch tensors.
+    and shifted to be positive.
 
     Args:
         task_data: A torch.Tensor that contains the time series of the task.
@@ -289,6 +325,7 @@ def split_task(task_data, data_config):
     week_num = data_config['week_num']
     pred_days = data_config['pred_days']
     test_days = data_config['test_days']
+    epsilon = data_config['epsilon']
 
     # Number of days in each input subsequence
     x_seq_days = week_num*7
@@ -328,6 +365,9 @@ def split_task(task_data, data_config):
         x_task_test = torch.vstack((x_task_test, x_slice))
         y_task_test = torch.vstack((y_task_test, y_slice))
 
+    # Unstandardized version of y_test
+    y_task_test_raw = y_task_test
+
     # Normalize using the mean and std of the training set (to avoid data leakage)
     train_mean = x_task_train.reshape((-1,)).mean()
     train_std = x_task_train.reshape((-1,)).std()
@@ -338,4 +378,79 @@ def split_task(task_data, data_config):
     x_task_test = (x_task_test - train_mean) / train_std
     y_task_test = (y_task_test - train_mean) / train_std
 
-    return x_task_train, y_task_train, x_task_test, y_task_test
+    # Shift subsequences to be positive (to avoid division with zero when calculating the
+    # log likelihood gamma regression loss function)
+    x_task_train_min = torch.min(x_task_train.view(-1))
+    x_task_train += (torch.abs(x_task_train_min) + epsilon)
+
+    x_task_test_min = torch.min(x_task_test.view(-1))
+    x_task_test += (torch.abs(x_task_test_min) + epsilon)
+
+    y_task_train_min = torch.min(y_task_train.view(-1))
+    y_task_train += (torch.abs(y_task_train_min) + epsilon)
+
+    y_task_test_min = torch.min(y_task_test.view(-1))
+    y_task_test += (torch.abs(y_task_test_min) + epsilon)
+
+    # Will be useful later for de-standardization
+    # This is used only when evaluating the optimal model
+    if target_dir_name is not None:
+        save_standardization_settings(train_mean,
+                                    train_std,
+                                    epsilon,
+                                    torch.abs(y_task_test_min),
+                                    target_dir_name)
+
+    return x_task_train, y_task_train, x_task_test, y_task_test, y_task_test_raw
+
+
+def unstandardized_preds(y_pred, target_dir_name):
+    """Transform standardized data back to original scale.
+
+    The process includes doing the inverse transformations of the ones used during data
+    preprocessing. That is, the data is shifted back to its original place and de-standardized.
+
+    Args:
+        y_pred: A torch tensor that contains the model predictions.
+        target_dir_name: A string with the name of the directory the transformation settings
+            are saved.
+    Returns:
+        A torch tensors that contains the predictions in the original scale.
+    """
+
+    settings_filepath = target_dir_name + 'settings.csv'
+    settings = pd.read_csv(settings_filepath)
+
+    # Shift back to 0
+    y_pred_raw = y_pred - (settings['epsilon'][0] + settings['y_test_min'][0])
+
+    # De-standardize
+    y_pred_raw *= settings['train_std'][0]
+    y_pred_raw += settings['train_mean'][0]
+
+    return y_pred
+
+
+def get_task_test_set(test_dataloader):
+    """Recreate a test set given its dataloader.
+
+    All samples yielded by the dataloader are concatenated together and transformed to a
+    single list.
+
+    Args:
+        test_dataloader: A torch Dataloader object that corresponds to a task's test set.
+    Returns:
+        A list that contains the test set of a specific task.
+    """
+
+    # Concatenate all output samples together.
+    y_test = []
+    for _, y_sample in test_dataloader:
+        y_test.append(y_sample)
+
+    # Transform list of lists to list (needs to be done twice).
+    y_test = [item.tolist() for item in y_test]
+    for _ in range(2):
+        y_test = [item for sublist in y_test for item in sublist]
+
+    return y_test

@@ -6,12 +6,15 @@ appropriate copying and passing around of the inner and outer loop parameters as
 meta-training and meta-evaluation of the model.
 """
 
+import os
+
 import numpy as np
+import pandas as pd
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 import data_setup
+import losses
 import model_builder
 import optimizers
 import utils
@@ -73,6 +76,8 @@ class MetaLearner(nn.Module):
         self.multi_step_loss_num_epochs = self.num_inner_steps
         self.second_order = args['second_order']
         self.second_to_first_order_epoch = args['second_to_first_order_epoch']
+        self.loss = args['loss']
+        self.kappa = args['kappa']
 
         # Base model
         self.network = model_builder.build_network(input_shape=1,
@@ -251,9 +256,9 @@ class MetaLearner(nn.Module):
             A dictionary that contains the mean loss of all tasks.
         """
 
-        losses = {'loss': torch.mean(torch.stack(total_losses))}
+        losses_dict = {'loss': torch.mean(torch.stack(total_losses))}
 
-        return losses
+        return losses_dict
 
 
     def build_summary_dict(self, epoch_losses, phase, train_losses=None):
@@ -278,13 +283,7 @@ class MetaLearner(nn.Module):
         return train_losses
 
 
-    def plot_predictions(
-            self,
-            test_dataloader,
-            names_weights_copy,
-            results_dir_name,
-            test_timeseries_code):
-
+    def plot_predictions(self, test_dataloader, names_weights_copy, target_dir_name):
         """Plot predicted vs true values of the given query set.
 
         Both true and predicted values are normalized and the plot is saved as a png file.
@@ -293,8 +292,7 @@ class MetaLearner(nn.Module):
             test_dataloader: A torch Dataloader object that corresponds to a task's query set.
             names_weights_copy: A dictionary that contains the inner-loop optimized weights of
                 the base model.
-            results_dir_name: A string with the name of the directory the results will be saved.
-            test_timeseries_code: A list with a string that is the id of the examined timeseries.
+            target_dir_name: A string with the name of the directory the results will be saved.
         """
 
         self.eval()
@@ -305,9 +303,88 @@ class MetaLearner(nn.Module):
                                 is_query_set=True)
 
         # True values
-        y_test = utils.get_task_test_set(test_dataloader)
+        y_test = data_setup.get_task_test_set(test_dataloader)
 
-        utils.plot_predictions(y_test, y_preds, results_dir_name, test_timeseries_code)
+        utils.plot_predictions(y_test, y_preds, target_dir_name)
+
+
+    def plot_learning_curve(self, train_losses, test_losses, target_dir_name, loss):
+        """Plot the learning curve of the desired model for a specific test task.
+
+        The plot contains the train loss and the test loss of the model for the number
+        of inner loop steps. The plot is saved as a png file.
+
+        Args:
+            train_losses: A list that contains the support set loss of each inner loop step for a
+                specific task.
+            test_losses: A list that contains the query set loss of each inner loop step for a
+                specific task.
+            target_dir_name: A string with the name of the directory the results will be saved.
+            loss: A string that is the name of the loss function used.
+        """
+
+        utils.plot_learning_curve(train_losses, test_losses, target_dir_name, loss)
+
+
+    def calculate_MAPE(
+            self,
+            test_dataloader,
+            names_weights_copy,
+            y_task_query_raw,
+            target_dir_name
+        ):
+        """Calculate MAPE metric for the specific query set of a task.
+
+        MAPE calculation is performed on the orignal scale of the timeseries' and as a result
+        first it is necessary to obtain the raw time series data and de-standardize the model's
+        predictions.
+
+        Args:
+            test_dataloader: A torch Dataloader object that corresponds to a task's query set.
+            names_weights_copy: A dictionary that contains the inner-loop optimized weights of
+                the base model.
+            y_task_query_raw: A torch tensor that includes the true output values in the original
+                scale.
+            target_dir_name: A string with the name of the directory the results will be saved.
+        Returns:
+            A float that is the MAPE metric for the given query set.
+        """
+
+        self.eval()
+
+        # Predicted values
+        _, y_preds = self.evaluate(dataloader=test_dataloader,
+                                weights=names_weights_copy,
+                                is_query_set=True)
+
+        # Predicted values on original scale
+        y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), target_dir_name)
+
+        return losses.MAPE(y_preds_raw, y_task_query_raw)
+
+
+    def create_logs(self, query_set_losses, train_dataloader, mape, target_dir_name):
+        """Create and save a .csv validation log file.
+
+        The file contains info about the losses, metrics and type of time series.
+
+        Args:
+            query_set_losses: A list that contains a tasks's query set loss for every inner loop
+                step.
+            train_dataloader: A torch Dataloader object that corresponds to a task's support set.
+            mape: A float that is the MAPE metric for the specific tasks's query set.
+            target_dir_name: A string with the name of the directory the logs will be saved.
+        """
+
+        task_log = pd.DataFrame({
+            'loss_type': self.loss,
+            'loss_value': [query_set_losses[self.num_inner_steps-1]],
+            'length': [len(train_dataloader)*7],
+            'MAPE': [mape]
+        })
+
+        # Save logs as .csv file
+        utils.save_validation_logs(task_log, target_dir_name)
 
 
     def get_per_step_loss_importance(self, epoch):
@@ -367,6 +444,7 @@ class MetaLearner(nn.Module):
 
         self.network.train()
         train_step_loss = 0.0
+        loss_fn = losses.get_loss(self.loss, self.kappa, self.device)
 
         for x_sample, y_sample in dataloader:
             x_sample, y_sample = x_sample.to(self.device), y_sample.to(self.device)
@@ -374,7 +452,7 @@ class MetaLearner(nn.Module):
             y_pred = self.network.forward(x_sample=x_sample,
                                           params=weights,
                                           is_query_set=is_query_set)
-            loss = F.mse_loss(y_pred, y_sample)
+            loss = loss_fn(y_pred, y_sample)
             train_step_loss += loss
 
         return train_step_loss
@@ -482,11 +560,11 @@ class MetaLearner(nn.Module):
             for train_task_data, _ in train_tasks_dataloader:
 
                 # Create support and query sets dataloaders
-                train_dataloader, test_dataloader = data_setup.build_task(
+                train_dataloader, test_dataloader, _ = data_setup.build_task(
                     task_data=train_task_data,
                     sample_batch_size=self.sample_batch_size,
                     data_config=self.data_config
-                    )
+                )
 
                 task_query_losses = []
 
@@ -549,15 +627,15 @@ class MetaLearner(nn.Module):
                 epoch_mean_query_losses.append(np.mean(tasks_mean_query_losses))
 
             # Losses is the double sum (eq.4 page 5 in How to train Your MAML)
-            losses = self.get_across_task_loss_metrics(total_losses=total_losses)
+            losses_dict = self.get_across_task_loss_metrics(total_losses=total_losses)
 
             # Meta update
-            self.meta_update(loss=losses['loss'])
+            self.meta_update(loss=losses_dict['loss'])
 
             self.meta_scheduler.step()
 
             if optimal_mode:
-                for key, value in zip(list(losses.keys()), list(losses.values())):
+                for key, value in zip(list(losses_dict.keys()), list(losses_dict.values())):
                     if key not in epoch_losses:
                         epoch_losses[key] = [float(value)]
                     else:
@@ -592,6 +670,7 @@ class MetaLearner(nn.Module):
         val_task_loss = 0.0
 
         y_preds = []
+        loss_fn = losses.get_loss(self.loss, self.kappa, self.device)
 
         with torch.no_grad():
             for x_sample, y_sample in dataloader:
@@ -600,7 +679,7 @@ class MetaLearner(nn.Module):
                 y_pred = self.network.forward(x_sample=x_sample,
                                               params=weights,
                                               is_query_set=is_query_set)
-                loss = F.mse_loss(y_pred, y_sample)
+                loss = loss_fn(y_pred, y_sample)
                 val_task_loss += loss
                 y_preds.append(y_pred.tolist())
 
@@ -642,22 +721,32 @@ class MetaLearner(nn.Module):
             support_set_losses = []
             query_set_losses = []
 
+            # If evaluating the optimal model, create a corresponding resilts directory
+            # for each task
+            if optimal_mode:
+                target_dir_name = results_dir_name + test_timeseries_code[0] + '/'
+                if not os.path.exists(target_dir_name):
+                    os.makedirs(target_dir_name)
+            else:
+                target_dir_name = None
+
             # Get support and query set dataloaders
-            train_dataloader, test_dataloader = data_setup.build_task(
+            train_dataloader, test_dataloader, y_task_query_raw = data_setup.build_task(
                     task_data=test_task_data,
                     sample_batch_size=self.sample_batch_size,
-                    data_config=self.data_config
-                    )
+                    data_config=self.data_config,
+                    target_dir_name=target_dir_name
+            )
 
             # Get a copy of the inner loop parameters
             names_weights_copy = self.get_inner_loop_params(state_dict=self.names_weights,
                                                             is_copy=True)
 
-            # Fine-tuning first (equivalent to inner loop optimization)
-            self.train()
-
             # Inner loop steps
             for inner_epoch in range(self.num_inner_steps):
+
+                # Fine-tuning first (equivalent to inner loop optimization)
+                self.train()
 
                 self.network.reset_states()
 
@@ -701,21 +790,27 @@ class MetaLearner(nn.Module):
 
             if optimal_mode:
                 # Learning curve for each fine-tuned model
-                utils.plot_learning_curve(support_set_losses,
+                self.plot_learning_curve(support_set_losses,
                                           query_set_losses,
-                                          results_dir_name,
-                                          test_timeseries_code)
+                                          target_dir_name,
+                                          self.loss)
 
                 # Prediction plots
-                self.plot_predictions(test_dataloader,
-                                      names_weights_copy,
-                                      results_dir_name,
-                                      test_timeseries_code)
+                self.plot_predictions(test_dataloader, names_weights_copy, target_dir_name)
 
                 # Save optimal fine-tuned model
-                target_dir_name = results_dir_name + test_timeseries_code[0] + '/'
                 self.save_parameters(target_dir_name)
 
+                # MAPE calculation on original scale
+                mape = self.calculate_MAPE(
+                    test_dataloader,
+                    names_weights_copy,
+                    y_task_query_raw,
+                    target_dir_name
+                )
+
+                # Create log file
+                self.create_logs(query_set_losses, train_dataloader, mape, target_dir_name)
             else:
                 mean_fold_val_loss = torch.mean(torch.stack(val_task_losses))
                 return mean_fold_val_loss

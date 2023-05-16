@@ -61,6 +61,10 @@ def objective(trial, ht_config, data_config, data_filenames):
         'eta_min': float(ht_config['eta_min']),
         'second_order': ht_config['second_order'],
         'second_to_first_order_epoch': ht_config['second_to_first_order_epoch'],
+        'loss': ht_config['loss'],
+        'kappa': trial.suggest_float('kappa',
+                                     ht_config['kappa']['lower_bound'],
+                                     ht_config['kappa']['upper_bound']),
         'train_epochs': trial.suggest_int(
             'train_epochs',
             int(ht_config['train_epochs']['lower_bound']),
@@ -176,6 +180,8 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
         'sample_batch_size': ht_config['sample_batch_size'],
         'num_inner_steps': ht_config['num_inner_steps'],
         'eta_min': ht_config['eta_min'],
+        'loss': ht_config['loss'],
+        'kappa': best_trial['params_kappa'].values[0],
         'train_epochs': best_trial['params_train_epochs'].values[0],
         'lstm_hidden_units': best_trial['params_lstm_hidden_units'].values[0],
         'init_learning_rate': best_trial['params_init_learning_rate'].values[0],
@@ -215,7 +221,8 @@ def meta_train_optimal(opt_config, data_config, data_filenames, results_dir_name
     # Plot learning curve during meta-training
     plot_meta_train_losses(epoch_mean_support_losses,
                            epoch_mean_query_losses,
-                           results_dir_name)
+                           results_dir_name,
+                           meta_learner.loss)
 
     # Save the weights that occur from meta-training the optimal model
     meta_learner.save_parameters(results_dir_name)
@@ -226,7 +233,8 @@ def meta_evaluate_optimal(opt_config, data_config, data_filenames, results_dir_n
 
     The meta-learner is initialized using the optimal initial base model weights and learned
     learning rates. Then it is evaluated on the query set of each test task after being trained
-    on the support set of the examined task and the corresponding learning curves are plotted.
+    on the support set of the examined task and a set of different metrics and plots related to
+    the evaluation is created. This is done separately for each task of the test tasks set.
 
     Args:
         opt_config: A dictionary that contains the optimal hyperparameters for the model.
