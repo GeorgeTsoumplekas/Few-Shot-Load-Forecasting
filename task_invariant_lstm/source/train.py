@@ -22,12 +22,13 @@ import yaml
 
 from matplotlib import pyplot as plt
 import optuna
+import pandas as pd
 from sklearn.model_selection import KFold
 import torch
-from torch import nn
 
 import data_setup
 import engine
+import losses
 import model_builder
 import utils
 
@@ -55,6 +56,10 @@ def objective(trial, ht_config, data_config, data_filenames):
         'task_batch_size': ht_config['task_batch_size'],
         'sample_batch_size': ht_config['sample_batch_size'],
         'seed': ht_config['seed'],
+        'loss': ht_config['loss'],
+        'kappa': trial.suggest_float('kappa',
+                                     ht_config['kappa']['lower_bound'],
+                                     ht_config['kappa']['upper_bound']),
         'learning_rate': trial.suggest_float('learning_rate',
                                              float(ht_config['learning_rate']['lower_bound']),
                                              float(ht_config['learning_rate']['upper_bound']),
@@ -84,6 +89,8 @@ def objective(trial, ht_config, data_config, data_filenames):
     lstm_hidden_units = config['lstm_hidden_units']
     learning_rate = config['learning_rate']
     output_shape = data_config['pred_days']*data_config['day_measurements']
+    loss = config['loss']
+    kappa = config['kappa']
 
     results = {}  # Contains the validation loss of each fold
 
@@ -112,7 +119,7 @@ def objective(trial, ht_config, data_config, data_filenames):
 
         network = model_builder.build_network(1, output_shape, lstm_hidden_units, device)
         optimizer = engine.build_optimizer(network, learning_rate)
-        loss_fn = nn.MSELoss()
+        loss_fn = losses.get_loss(loss, kappa, device)
 
         # Train model using the train tasks
         for _ in range(num_train_epochs):
@@ -140,16 +147,19 @@ def objective(trial, ht_config, data_config, data_filenames):
             optimizer = engine.build_optimizer(finetuned_network, learning_rate)
 
             # Create the dataloaders
-            val_train_dataloader, val_test_dataloader = \
-                data_setup.build_test_task(val_task_data, sample_batch_size, data_config)
+            val_train_dataloader, val_test_dataloader, _ = data_setup.build_test_task(
+                val_task_data,
+                sample_batch_size,
+                data_config
+            )
 
             # Fine-tune model with task's training data
             for _ in range(num_finetune_epochs):
                 _ = engine.train_step(finetuned_network,
-                                                  val_train_dataloader,
-                                                  loss_fn,
-                                                  optimizer,
-                                                  device)
+                                      val_train_dataloader,
+                                      loss_fn,
+                                      optimizer,
+                                      device)
 
             #  Evaluate on task's test data
             val_task_loss, _ = engine.evaluate(finetuned_network,
@@ -224,6 +234,8 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
         'task_batch_size': ht_config['task_batch_size'],
         'sample_batch_size': ht_config['sample_batch_size'],
         'seed': ht_config['seed'],
+        'loss': ht_config['loss'],
+        'kappa': best_trial['params_kappa'].values[0],
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'train_epochs': best_trial['params_train_epochs'].values[0],
         'finetune_epochs': best_trial['params_finetune_epochs'].values[0],
@@ -246,8 +258,6 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
             the splitting and preprocessing of the data.
         data_filenames: A list of strings that contains the paths to the training tasks.
         results_dir_name: A string with the name of the directory the results will be saved.
-    Returns:
-        A list that contains the training loss of each training epoch.
     """
 
     # Set random seed for reproducibility purposes
@@ -261,6 +271,8 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     lstm_hidden_units = opt_config['lstm_hidden_units']
     learning_rate = opt_config['learning_rate']
     output_shape = data_config['pred_days']*data_config['day_measurements']
+    loss = opt_config['loss']
+    kappa = opt_config['kappa']
 
     # Create dataloader for the training tasks
     train_tasks_dataloader = data_setup.build_tasks_set(data_filenames,
@@ -274,7 +286,7 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                           hidden_units=lstm_hidden_units,
                                           device=device)
     optimizer = engine.build_optimizer(network, learning_rate)
-    loss_fn = nn.MSELoss()
+    loss_fn = losses.get_loss(loss, kappa, device)
 
     train_losses = []
 
@@ -289,10 +301,10 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                         data_config)
         train_losses.append(train_loss)
 
+    utils.plot_train_loss(train_losses, results_dir_name, loss)
+
     # Save trained model
     utils.save_model(network, results_dir_name)
-
-    return train_losses
 
 
 def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
@@ -300,8 +312,9 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
 
     The optimal model that occured after training using the optimal hyperparameters is loaded
     and then fine-tuned using the task's train data. The train and test losses are calculated
-    for each fine-tuning epoch and after fine-tuning is done, the optimal model is saved. This is
-    done separately for each task of the test tasks set.
+    for each fine-tuning epoch and after fine-tuning is done, the optimal model as well as a
+    number of different logs and metrics are saved. This is done separately for each task of
+    the test tasks set.
 
     Args:
         opt_config: A dictionary that contains the optimal hyperparameters for the model.
@@ -323,6 +336,8 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
     learning_rate = opt_config['learning_rate']
     output_shape = data_config['pred_days']*data_config['day_measurements']
     model_save_path = results_dir_name + 'optimal_trained_model.pth'
+    loss = opt_config['loss']
+    kappa = opt_config['kappa']
 
     # Get the dataloader for the set of test tasks
     test_tasks_dataloader = data_setup.build_tasks_set(test_filenames,
@@ -332,6 +347,11 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
 
     # Fine-tuning process for each test task
     for test_task_data, test_timeseries_code in test_tasks_dataloader:
+        # Each task has an assigned directory to save relative results
+        target_dir_name = results_dir_name + test_timeseries_code[0] + '/'
+        if not os.path.exists(target_dir_name):
+            os.makedirs(target_dir_name)
+
         # Each fine-tuned network is derived from the same trained model
         # but is different for each validation task, since it's fine-tuned in different data.
         network = model_builder.build_network(1, output_shape, lstm_hidden_units, device)
@@ -340,15 +360,18 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
         # Define an optimizer for the new model
         optimizer = engine.build_optimizer(network, learning_rate)
 
-        loss_fn = nn.MSELoss()
+        loss_fn = losses.get_loss(loss, kappa, device)
 
         finetune_losses = []
         test_losses = []
 
         # Get the train and test dataloaders
-        finetune_dataloader, test_dataloader = data_setup.build_test_task(test_task_data,
-                                                                          sample_batch_size,
-                                                                          data_config)
+        finetune_dataloader, test_dataloader, y_task_test_raw = data_setup.build_test_task(
+            test_task_data,
+            sample_batch_size,
+            data_config,
+            target_dir_name
+        )
 
         # Fine-tune model with task's training data and evaluate with task's test data
         for _ in range(num_epochs):
@@ -366,19 +389,24 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
             test_losses.append(test_loss)
 
         # Learning curve for each fine-tuned model
-        utils.plot_learning_curve(finetune_losses,
-                                  test_losses,
-                                  results_dir_name,
-                                  test_timeseries_code)
+        utils.plot_learning_curve(finetune_losses, test_losses, target_dir_name, loss)
 
         # Prediction plots
-        y_test = utils.get_task_test_set(test_dataloader)
+        y_test = data_setup.get_task_test_set(test_dataloader)
         _, y_preds = engine.evaluate(network, test_dataloader, loss_fn, device)
-        utils.plot_predictions(y_test, y_preds, results_dir_name, test_timeseries_code)
+        utils.plot_predictions(y_test, y_preds, target_dir_name)
 
-        # Save optimal fine-tuned model
-        target_dir_name = results_dir_name + test_timeseries_code[0] + '/'
-        utils.save_model(network, target_dir_name)
+        # MAPE calculation on original scale
+        y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), target_dir_name)
+        mape = losses.MAPE(y_preds_raw, y_task_test_raw)
+
+        task_log = pd.DataFrame({'loss_type': loss,
+                                 'loss_value': [test_losses[num_epochs-1]],
+                                 'length': [len(finetune_dataloader)*7],
+                                 'MAPE': [mape]})
+
+        # Save logs as .csv file
+        utils.save_validation_logs(task_log, target_dir_name)
 
 
 def main():
@@ -436,18 +464,11 @@ def main():
                                        data_config,
                                        train_filenames)
 
-    # Train optimal model and plot train loss
-    train_losses = train_optimal(opt_config,
-                                 data_config,
-                                 train_filenames,
-                                 results_dir_name)
-    utils.plot_train_loss(train_losses, results_dir_name)
+    # Train optimal model
+    train_optimal(opt_config, data_config, train_filenames, results_dir_name)
 
     # Fine-tune and evaluate optimal model on each test time series
-    finetune_optimal(opt_config,
-                     data_config,
-                     test_filenames,
-                     results_dir_name)
+    finetune_optimal(opt_config, data_config, test_filenames, results_dir_name)
 
 
 if __name__ == "__main__":

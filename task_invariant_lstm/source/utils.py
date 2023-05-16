@@ -49,32 +49,19 @@ def save_model(network, results_dir_name):
     torch.save(obj=network.state_dict(), f=target_file)
 
 
-def get_task_test_set(test_dataloader):
-    """Recreate a test set given its dataloader.
-
-    All samples yielded by the dataloader are concatenated together and transformed to a
-    single list.
+def save_validation_logs(val_logs, target_dir_name):
+    """Save the validation logs as a .csv file.
 
     Args:
-        test_dataloader: A torch Dataloader object that corresponds to a task's test set.
-    Returns:
-        A list that contains the test set of a specific task.
+        val_logs: A pandas DataFrame that contains the logs for the evaluated task.
+        target_dir_name: A string with the name of the directory the results will be saved.
     """
 
-    # Concatenate all output samples together.
-    y_test = []
-    for _, y_sample in test_dataloader:
-        y_test.append(y_sample)
-
-    # Transform list of lists to list (needs to be done twice).
-    y_test = [item.tolist() for item in y_test]
-    for _ in range(2):
-        y_test = [item for sublist in y_test for item in sublist]
-
-    return y_test
+    target_file = target_dir_name + 'logs.csv'
+    val_logs.to_csv(target_file, index=False)
 
 
-def plot_train_loss(train_losses, results_dir_name):
+def plot_train_loss(train_losses, results_dir_name, loss):
     """Plot the learning curve of the model during its training process.
 
     The plot contains the train loss of the model for the number of epochs that it has been
@@ -83,20 +70,21 @@ def plot_train_loss(train_losses, results_dir_name):
     Args:
         train_losses: A list that contains the train loss of each training epoch.
         results_dir_name: A string with the name of the directory the results will be saved.
+        loss: A string that is the name of the loss function used.
     """
 
     target_file = results_dir_name + 'optimal_train_loss.png'
 
     plt.figure()
     plt.plot(train_losses, 'b', label='Train loss')
-    plt.ylabel('MSE')
-    plt.xlabel('Epochs')
+    plt.ylabel(loss)
+    plt.xlabel('Epoch')
     plt.title('Train loss of optimal model on train tasks')
     plt.legend()
     plt.savefig(target_file)
 
 
-def plot_learning_curve(train_losses, test_losses, results_dir_name, timeseries_code):
+def plot_learning_curve(train_losses, test_losses, target_dir_name, loss):
     """Plot the learning curve of the desired model for a specific test task.
 
     The plot contains the train loss and the test loss of the model for the number
@@ -105,26 +93,23 @@ def plot_learning_curve(train_losses, test_losses, results_dir_name, timeseries_
     Args:
         train_losses: A list that contains the train loss of each fine-tune epoch.
         test_losses: A list that contains the test loss of each training epoch.
-        results_dir_name: A string with the name of the directory the results will be saved.
-        timeseries_code: A list with a string that is the id of the examined timeseries.
+        target_dir_name: A string with the name of the directory the results will be saved.
+        loss: A string that is the name of the loss function used.
     """
 
     plt.figure()
     plt.plot(train_losses, c='b', label='Train Loss')
     plt.plot(test_losses, c='r', label='Test Loss')
     plt.xlabel('Epoch')
-    plt.ylabel('MSE')
+    plt.ylabel(loss)
     plt.title('Learning curve of optimal model')
     plt.legend()
 
-    target_dir = results_dir_name + timeseries_code[0] + "/"
-    if not os.path.exists(target_dir):
-        os.makedirs(target_dir)
-    target_file = target_dir + 'learning_curve.png'
+    target_file = target_dir_name + 'learning_curve.png'
     plt.savefig(target_file)
 
 
-def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
+def plot_predictions(y_true, y_pred, target_dir_name):
     """Plot predicted vs true values of the given test set.
 
     Both true and predicted values are normalized and the plot is saved as a png file.
@@ -132,8 +117,7 @@ def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
     Args:
         y_true: A list that contains the true output values of the examined test set.
         y_pred: A list that contains the predicted output values of the examined test set.
-        results_dir_name: A string with the name of the directory the results will be saved.
-        timeseries_code: A list with a string that is the id of the examined timeseries.
+        target_dir_name: A string with the name of the directory the results will be saved.
     """
 
     # Transform list of lists to list
@@ -147,5 +131,5 @@ def plot_predictions(y_true, y_pred, results_dir_name, timeseries_code):
     plt.title('Model predictions vs true values on test set')
     plt.legend()
 
-    target_file = results_dir_name + timeseries_code[0] + '/predictions.png'
+    target_file = target_dir_name + '/predictions.png'
     plt.savefig(target_file)
