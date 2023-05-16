@@ -192,7 +192,13 @@ def visualize_embeddings(train_task_embeddings,
         test_embeddings = np.vstack([test_embeddings, np.array(embedding)])
 
     # Apply PCA
-    pca = PCA(n_components=30)
+    n_components = None
+    if embedding_size<30:
+        n_components = round(0.9*embedding_size)
+    else:
+        n_components = 30
+    pca = PCA(n_components=n_components)
+
     train_embeddings_pca = pca.fit_transform(train_embeddings)
     test_embeddings_pca = pca.transform(test_embeddings)
 
