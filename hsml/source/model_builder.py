@@ -419,10 +419,10 @@ class HierarchicalClustering(nn.Module):
                 h_i_next[i] += (p_i[j][i] * torch.tanh(self.linear_layers[layer_name](h_i[j])))
 
         return h_i_next
- 
+
 
     def forward(self, task_embedding):
-        
+
         h_level = task_embedding
 
         for level in range(1, self.num_levels):
@@ -430,7 +430,7 @@ class HierarchicalClustering(nn.Module):
             h_level = self.update_step(p_level, h_level, level)
 
         return h_level
-    
+
 
 class ParameterGate(nn.Module):
 
@@ -450,7 +450,7 @@ class ParameterGate(nn.Module):
         task_total_representation = torch.cat([task_representation, task_cluster_representation],
                                               dim=0)
         return self.sigmoid(self.linear(task_total_representation))
-    
+
 
 def build_base_network(input_shape, output_shape, hidden_units, device):
     """Initialize the custom base model and load it to the spicified device for training.

@@ -3,6 +3,7 @@ import json
 import os
 import yaml
 
+import numpy as np
 import torch
 
 import engine
@@ -75,6 +76,17 @@ def main():
 
     meta_learner = engine.build_meta_learner(args=args,
                                                  data_config=data_config)
+    
+    names_weights_copy = meta_learner.get_inner_loop_params(state_dict=meta_learner.names_weights,
+                                                            is_copy=True)
+    
+    weights_mask = torch.rand(1, meta_learner.get_inner_loop_params_number())
+    
+    names_weights_masked = meta_learner.apply_weights_mask(names_weights_copy, weights_mask)
+
+    print()
+    for name, key in names_weights_masked.items():
+            print(name, key.shape, np.prod(key.shape))
 
 
 if __name__ == "__main__":
