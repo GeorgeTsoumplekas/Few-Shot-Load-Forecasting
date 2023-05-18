@@ -721,7 +721,7 @@ class MetaLearner(nn.Module):
             support_set_losses = []
             query_set_losses = []
 
-            # If evaluating the optimal model, create a corresponding resilts directory
+            # If evaluating the optimal model, create a corresponding results directory
             # for each task
             if optimal_mode:
                 target_dir_name = results_dir_name + test_timeseries_code[0] + '/'

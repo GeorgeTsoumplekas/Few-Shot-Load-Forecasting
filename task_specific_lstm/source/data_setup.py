@@ -220,7 +220,7 @@ def split_train_test(data, data_split_constants, results_dir_name):
     return x_train, y_train, x_test, y_test, y_test_raw
 
 
-def unstandardized_preds(y_pred, results_dir_name):
+def unstandardized_preds(y_pred, results_dir_name, loss):
     """Transform standardized data back to original scale.
 
     The process includes doing the inverse transformations of the ones used during data
@@ -236,6 +236,9 @@ def unstandardized_preds(y_pred, results_dir_name):
 
     settings_filepath = results_dir_name + 'settings.csv'
     settings = pd.read_csv(settings_filepath)
+
+    if loss == 'Gamma':
+        y_pred = torch.exp(y_pred)
 
     # Shift back to 0
     y_pred_raw = y_pred - (settings['epsilon'][0] + settings['y_test_min'][0])

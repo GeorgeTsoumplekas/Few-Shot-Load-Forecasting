@@ -34,6 +34,14 @@ MAML: maml/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/*
 embedding: task_embedding/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/*
 	./task_embedding/train_script
 
+HSML: hsml/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/* data/iONA_train_embeddings.json data/iONA_test_embeddings.json
+	./hsml/train_script
+
+embedding_HSML: task_embedding/config.yaml hsml/config.yaml data/iONA_train_aggregated/* data/iONA_test_aggregated/*
+	./task_embedding/train_script
+	./hsml/update_config
+	./hsml/train_script
+
 .PHONY: clean
 clean:
 	find . | grep -E "(__pycache__|\.pyc|\.pyo$)" | xargs rm -rf

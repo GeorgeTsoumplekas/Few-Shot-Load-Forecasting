@@ -379,6 +379,9 @@ def evaluate_optimal(opt_config,
                                                          device)
         total_loss += task_loss
 
+        if loss == 'Gamma':
+            y_pred = torch.exp(y_pred)
+
         # Logs for the task
         task_log = pd.DataFrame({'timeseries_code': timeseries_code,
                                  'loss_type': loss,

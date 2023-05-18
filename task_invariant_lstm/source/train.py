@@ -397,7 +397,7 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
         utils.plot_predictions(y_test, y_preds, target_dir_name)
 
         # MAPE calculation on original scale
-        y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), target_dir_name)
+        y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), target_dir_name, loss)
         mape = losses.MAPE(y_preds_raw, y_task_test_raw)
 
         task_log = pd.DataFrame({'loss_type': loss,

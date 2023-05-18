@@ -198,7 +198,7 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
     utils.plot_predictions(y_test, y_preds, results_dir_name)
 
     # MAPE calculation on original scale
-    y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), results_dir_name)
+    y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), results_dir_name, loss)
     mape = losses.MAPE(y_preds_raw, y_test_raw)
 
     # Save optimal model
