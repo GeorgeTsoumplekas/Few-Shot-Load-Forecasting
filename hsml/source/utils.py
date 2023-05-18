@@ -12,6 +12,28 @@ from matplotlib import pyplot as plt
 import torch
 
 
+def set_cuda_reproducibility():
+    """Make LSTMs deterministic when executed on GPUs to ensure reproducibility.
+
+    See warning at https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+    """
+
+    if torch.cuda.is_available():
+        if torch.version.cuda == "10.1":
+            os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        elif torch.version.cuda >= "10.2":
+            os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:2"
+
+
+def set_random_seeds(seed):
+    """Set random seeds in all libraries that might be invoked to produce random numbers."""
+
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+
 def set_device():
     """Set torch device to the best available option (cuda gpu > cpu).
 
@@ -22,3 +44,128 @@ def set_device():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     return device
+
+
+def set_model_args(config):
+    """Create a dictionary that contains the parameters to be fed into the Meta-Learning model.
+
+    Args:
+        config: A dictionary that contains the configuration of the whole pipeline, part of
+            are the parameters of the Meta-Learning model.
+    Returns:
+        A dictionary that contains all configurations to be passed to the meta-learner.
+    """
+
+    args = {
+        'train_epochs': config['train_epochs'],
+        'task_batch_size': config['task_batch_size'],
+        'sample_batch_size': config['sample_batch_size'],
+        'lstm_hidden_units': config['lstm_hidden_units'],
+        'init_learning_rate': float(config['init_learning_rate']),
+        'meta_learning_rate': float(config['meta_learning_rate']),
+        'eta_min': float(config['eta_min']),
+        'num_inner_steps': config['num_inner_steps'],
+        'second_order': config['second_order'],
+        'second_to_first_order_epoch': config['second_to_first_order_epoch'],
+        'num_levels': config['num_levels'],
+        'num_centers': config['num_centers'],
+        'sigma': config['sigma'],
+        'embedding_size': config['embedding_size'],
+        'loss': config['loss'],
+        'kappa': config['kappa']
+    }
+
+    return args
+
+
+def plot_predictions(y_true, y_pred, target_dir_name):
+    """Plot predicted vs true values of the given test set.
+
+    Both true and predicted values are normalized and the plot is saved as a png file.
+
+    Args:
+        y_true: A list that contains the true output values of the examined test set.
+        y_pred: A list that contains the predicted output values of the examined test set.
+        results_dir_name: A string with the name of the directory the results will be saved.
+        timeseries_code: A list with a string that is the id of the examined timeseries.
+    """
+
+    # Transform list of lists to list
+    y_pred = [item for sublist in y_pred for item in sublist]
+
+    plt.figure()
+    plt.plot(y_true, 'b', label='True')
+    plt.plot(y_pred, 'r', label='Predicted')
+    plt.xlabel('Timestep')
+    plt.ylabel('Normalized Load')
+    plt.title('Model predictions vs true values on test set')
+    plt.legend()
+
+    target_file = target_dir_name + '/predictions.png'
+    plt.savefig(target_file)
+
+
+def save_validation_logs(val_logs, target_dir_name):
+    """Save the validation logs as a .csv file.
+
+    Args:
+        val_logs: A pandas DataFrame that contains the logs for the evaluated task.
+        target_dir_name: A string with the name of the directory the results will be saved.
+    """
+
+    target_file = target_dir_name + 'logs.csv'
+    val_logs.to_csv(target_file, index=False)
+
+
+def plot_learning_curve(train_losses, test_losses, target_dir_name, loss):
+    """Plot the learning curve of the desired model for a specific test task.
+
+    The plot contains the train loss and the test loss of the model for the number
+    of inner loop steps. The plot is saved as a png file.
+
+    Args:
+        train_losses: A list that contains the support set loss of each inner loop step for a
+            specific task.
+        test_losses: A list that contains the query set loss of each inner loop step for a
+            specific task.
+        target_dir_name: A string with the name of the directory the results will be saved.
+        loss: A string that is the name of the loss function used.
+    """
+
+    plt.figure()
+    plt.plot(train_losses, c='b', label='Support Set Loss')
+    plt.plot(test_losses, c='r', label='Query Set Loss')
+    plt.xlabel('Inner Loop Step')
+    plt.ylabel(loss)
+    plt.title('Learning curve of optimal model')
+    plt.legend()
+
+    target_file = target_dir_name + 'learning_curve.png'
+    plt.savefig(target_file)
+
+
+def plot_meta_train_losses(support_losses, query_losses, results_dir_name, loss):
+    """Plot the learning curve of the model during meta-training.
+
+    The plot contains the mean loss of all tasks' support sets the model sees in each epoch
+    during meta-training. Similarly for all tasks' query sets. The plot is saved as a png file.
+
+    Args:
+        support_losses: A list that contains the mean loss for all meta-train tasks' support sets
+            during each epoch.
+        quer_losses: A list that contains the mean loss for all meta-train tasks' query sets
+            during each epoch.
+        results_dir_name: A string with the name of the directory the results will be saved.
+        loss: A string that is the name of the loss function used.
+    """
+
+    target_file = results_dir_name + 'optimal_train_losses.png'
+
+    plt.figure()
+    plt.plot(support_losses, c='b', label='Mean support set loss')
+    plt.plot(query_losses, c='r', label='Mean query set loss')
+    plt.ylabel(loss)
+    plt.xlabel('Epochs')
+    plt.title('Mean loss of optimal model on support and query sets of train tasks')
+    plt.legend()
+    plt.savefig(target_file)

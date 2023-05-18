@@ -7,5 +7,5 @@ IFS=$'\n\t'
 python3 ./hsml/source/train.py --train_dir "./data/iONA_train_aggregated/" \
                                --test_dir "./data/iONA_test_aggregated/" \
                                --train_embeddings_path "./data/iONA_train_embeddings.json" \
-                               --test_embedding_path "./data/iONA_test_embeddings.json" \
-                               --config "./maml/config.yaml"
+                               --test_embeddings_path "./data/iONA_test_embeddings.json" \
+                               --config "./hsml/config.yaml"

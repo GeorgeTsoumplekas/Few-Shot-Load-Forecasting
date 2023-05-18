@@ -1,0 +1,42 @@
+data_config:
+  day_measurements: 96
+  epsilon: 0.1
+  pred_days: 1
+  test_days: 7
+  week_num: 1
+ht_config:
+  embedding_size: 134
+  eta_min: 1e-6
+  init_learning_rate:
+    log: true
+    lower_bound: 1e-4
+    upper_bound: 1e-3
+  k_folds: 3
+  kappa:
+    lower_bound: 1.5
+    upper_bound: 5.0
+  loss: MSE
+  lstm_hidden_units:
+    lower_bound: 16
+    upper_bound: 64
+  meta_learning_rate:
+    log: true
+    lower_bound: 1e-5
+    upper_bound: 1e-3
+  num_centers:
+  - 1
+  - 4
+  - 2
+  - 1
+  num_inner_steps: 3
+  num_levels: 4
+  sample_batch_size: 1
+  second_order: false
+  second_to_first_order_epoch: 8
+  sigma: 2.0
+  task_batch_size: 1
+  train_epochs:
+    lower_bound: 10
+    upper_bound: 30
+n_trials: 10
+seed: 42

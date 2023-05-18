@@ -361,7 +361,7 @@ class BaseLearner(nn.Module):
 
 class HierarchicalClustering(nn.Module):
 
-    def __init__(self, num_levels, num_centers, sigma, embedding_size):
+    def __init__(self, num_levels, num_centers, sigma, embedding_size, device):
 
         super().__init__()
 
@@ -369,6 +369,7 @@ class HierarchicalClustering(nn.Module):
         self.num_centers = num_centers
         self.embedding_size = embedding_size
         self.sigma = sigma
+        self.device = device
 
         self.cluster_centers = nn.ParameterDict()
         self.linear_layers = nn.ModuleDict()
@@ -385,15 +386,15 @@ class HierarchicalClustering(nn.Module):
                 center_name = "level_" + str(i) + "_center_" + str(j+1)
                 self.cluster_centers[center_name] = nn.Parameter(
                     data=torch.rand(self.embedding_size), requires_grad=True)
-                
+
 
     def assignment_step(self, h_i, level):
 
         # level starts from 1, not 0, i.e. 1,2,3 for 4 levels
-        p_i = torch.zeros(self.num_centers[level-1], self.num_centers[level])
+        p_i = torch.zeros(self.num_centers[level-1], self.num_centers[level]).to(self.device)
 
         for i, h_i_cluster in enumerate(h_i):  # test we get a correct h_i_cluster each time
-            assignment_scores = torch.zeros(self.num_centers[level])
+            assignment_scores = torch.zeros(self.num_centers[level]).to(self.device)
 
             for center_idx in range(self.num_centers[level]):
                 center_name = "level_" + str(level) + "_center_" + str(center_idx+1)
@@ -410,7 +411,7 @@ class HierarchicalClustering(nn.Module):
     def update_step(self, p_i, h_i, level):
 
         # level starts from 1, not 0, i.e. 1,2,3 for 4 levels
-        h_i_next = torch.zeros(self.num_centers[level], self.embedding_size)
+        h_i_next = torch.zeros(self.num_centers[level], self.embedding_size).to(self.device)
 
         for i in range(self.num_centers[level]):
             layer_name = "linear_" + str(level)
@@ -446,9 +447,8 @@ class ParameterGate(nn.Module):
 
 
     def forward(self, task_representation, task_cluster_representation):
-
         task_total_representation = torch.cat([task_representation, task_cluster_representation],
-                                              dim=0)
+                                              dim=1)
         return self.sigmoid(self.linear(task_total_representation))
 
 
@@ -477,7 +477,8 @@ def build_cluster_network(num_levels, num_centers, sigma, embedding_size, device
     cluster_network = HierarchicalClustering(num_levels,
                                              num_centers,
                                              sigma,
-                                             embedding_size).to(device)
+                                             embedding_size,
+                                             device).to(device)
     return cluster_network
 
 

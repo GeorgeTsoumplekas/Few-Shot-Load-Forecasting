@@ -43,7 +43,7 @@ class AcrossTasksDataset(Dataset):
 
         return self.data[start_idx:end_idx], \
                self.timeseries_codes[index], \
-               self.embeddings[self.timeseries_codes[index]]
+               torch.tensor(self.embeddings[self.timeseries_codes[index]])
 
     def __len__(self):
         """Get the number of tasks (timeseries) in the tasks set."""
@@ -198,6 +198,7 @@ def get_tasks_dataset(data_filenames, pred_days, test_days, week_num, day_measur
 
 
 def build_tasks_set(data_filenames, data_config, task_batch_size, embeddings):
+    # TODO: Update docstring
     """Create a dataloader that handles the dataset of the given tasks.
 
     Args:

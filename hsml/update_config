@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Bash Strict Mode
+set -euo pipefail
+IFS=$'\n\t'
+
+python3 ./hsml/source/update_config.py --config "./hsml/config.yaml" \
+                                       --train_embeddings_path "./data/mini_iONA_train_embeddings.json"
