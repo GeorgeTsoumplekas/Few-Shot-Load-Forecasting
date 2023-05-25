@@ -54,6 +54,7 @@ def objective(trial, x_train, y_train, ht_config):
         'scheduler_patience': int(ht_config['scheduler_patience']),
         'scheduler_threshold': float(ht_config['scheduler_threshold']),
         'loss': ht_config['loss'],
+        'lstm_hidden_units': ht_config['lstm_hidden_units'],
         'kappa': trial.suggest_float('kappa',
                                      ht_config['kappa']['lower_bound'],
                                      ht_config['kappa']['upper_bound']),
@@ -63,11 +64,7 @@ def objective(trial, x_train, y_train, ht_config):
                                              log=ht_config['learning_rate']['log']),
         'epochs': trial.suggest_int('epochs',
                                     int(ht_config['epochs']['lower_bound']),
-                                    int(ht_config['epochs']['upper_bound'])),
-        'lstm_hidden_units': trial.suggest_int('lstm_hidden_units',
-                                               int(ht_config['lstm_hidden_units']['lower_bound']),
-                                               int(ht_config['lstm_hidden_units']['upper_bound']),
-                                               log=ht_config['lstm_hidden_units']['log'])
+                                    int(ht_config['epochs']['upper_bound']))
     }
 
     # Set random seed for reproducibility purposes
@@ -274,7 +271,7 @@ def hyperparameter_tuning(n_trials, results_dir_name, x_train, y_train, ht_confi
         'scheduler_threshold': float(ht_config['scheduler_threshold']),
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'epochs': best_trial['params_epochs'].values[0],
-        'lstm_hidden_units': best_trial['params_lstm_hidden_units'].values[0],
+        'lstm_hidden_units': ht_config['lstm_hidden_units'],
         'loss': ht_config['loss'],
         'kappa': best_trial['params_kappa'].values[0],
     }
