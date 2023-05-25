@@ -57,6 +57,8 @@ def objective(trial, ht_config, data_config, data_filenames):
         'sample_batch_size': ht_config['sample_batch_size'],
         'seed': ht_config['seed'],
         'loss': ht_config['loss'],
+        'lstm_hidden_units': ht_config['lstm_hidden_units'],
+        'finetune_epochs': ht_config['finetune_epochs'],
         'kappa': trial.suggest_float('kappa',
                                      ht_config['kappa']['lower_bound'],
                                      ht_config['kappa']['upper_bound']),
@@ -66,14 +68,7 @@ def objective(trial, ht_config, data_config, data_filenames):
                                              log=ht_config['learning_rate']['log']),
         'train_epochs': trial.suggest_int('train_epochs',
                                           int(ht_config['train_epochs']['lower_bound']),
-                                          int(ht_config['train_epochs']['upper_bound'])),
-        'finetune_epochs': trial.suggest_int('finetune_epochs',
-                                          int(ht_config['finetune_epochs']['lower_bound']),
-                                          int(ht_config['finetune_epochs']['upper_bound'])),
-        'lstm_hidden_units': trial.suggest_int('lstm_hidden_units',
-                                               int(ht_config['lstm_hidden_units']['lower_bound']),
-                                               int(ht_config['lstm_hidden_units']['upper_bound']),
-                                               log=ht_config['lstm_hidden_units']['log'])
+                                          int(ht_config['train_epochs']['upper_bound']))
     }
 
     # Set random seed for reproducibility purposes
@@ -238,8 +233,8 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
         'kappa': best_trial['params_kappa'].values[0],
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'train_epochs': best_trial['params_train_epochs'].values[0],
-        'finetune_epochs': best_trial['params_finetune_epochs'].values[0],
-        'lstm_hidden_units': best_trial['params_lstm_hidden_units'].values[0]
+        'finetune_epochs': ht_config['finetune_epochs'],
+        'lstm_hidden_units': ht_config['lstm_hidden_units']
     }
 
     return opt_config
