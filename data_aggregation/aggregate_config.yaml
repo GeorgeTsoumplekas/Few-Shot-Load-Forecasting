@@ -6,11 +6,11 @@
  train_metadata_dir: './data/train_segments_metadata/'
  test_metadata_dir: './data/test_segments_metadata/'
  train_min_length: 2
- train_max_length: 7
- train_mean_length: 4
- train_std: 2
+ train_max_length: 4
+ train_mean_length: 3
+ train_std: 1
  test_min_length: 1
- test_max_length: 4
+ test_max_length: 3
  test_mean_length: 2
  test_std: 1
  num_timeseries: 50
