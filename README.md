@@ -1,1 +1,1 @@
-This repository contains the code for my thesis "Few-Shot Load Forecasting".
+This repository contains the code for my thesis "Few-Shot Learning Models for Load Forecasting in Smart Grids".
