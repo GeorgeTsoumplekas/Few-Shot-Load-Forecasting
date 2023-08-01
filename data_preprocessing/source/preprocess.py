@@ -16,6 +16,7 @@ import os
 from time import time
 import yaml
 
+# from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -27,6 +28,7 @@ def detect_invalid(
     zero_threshold: float,
     iqr_lower_ratio: float,
     iqr_upper_ratio: float,
+    # ts_code: str,
     ) -> pd.DataFrame:
     """
     Detection of the anomalies/outliers in the raw time series.
@@ -69,6 +71,7 @@ def detect_invalid(
     series_enriched['Hour'] = [str(val).split()[1] for val in series_enriched['DateTime']]
     series_enriched.drop('Date_Time', axis=1, inplace=True)
 
+
     # ANOMALIES DUE TO WRONG INTERPOLATION IN THE ORIGINAL TIME SERIES
     # These anomalies are usually defined by patterns with slow-changing slopes. As a result,
     # when computing the rolling window std of the differences time series, these values will be
@@ -93,6 +96,35 @@ def detect_invalid(
     series_enriched.loc[series_enriched['DateTime'].isin(detected_anomalies_idx),
                         'Anomaly'] = int(-1)
 
+    # # Necessary only for the following plot
+    # rol_std_series_diff = rol_std_series_diff.reset_index()
+    # rol_std_series_diff['DateTime'] = pd.to_datetime(rol_std_series_diff['DateTime'])
+    # rol_std_series_diff = rol_std_series_diff.set_index('DateTime')
+
+    # series_enriched['DateTime'] = pd.to_datetime(series_enriched['DateTime'])
+    # series_enriched = series_enriched.set_index('DateTime')
+
+    # _, ax = plt.subplots()
+    # a = series_enriched[['Measurements', 'Anomaly']]
+    # a.loc[series_enriched['Anomaly'] == 1, 'Measurements'] = np.NaN #anomaly
+
+    # b = series_enriched[['Measurements', 'Anomaly']]
+    # b.loc[series_enriched['Anomaly'] == -1, 'Measurements'] = np.NaN
+
+    # ax.plot(b['Measurements'], color='blue', label='Normal', alpha=0.7)
+    # ax.plot(a['Measurements'], color='red', label='Anomaly', alpha=0.9)
+    # ax.plot(rol_std_series_diff,
+    #         color='orange',
+    #         label='Second differences rolling std',
+    #         alpha=0.7)
+    # # plt.axhline(y=0.5, color='black', linestyle='--', label='Threshold', alpha=0.7)
+    # plt.legend()
+    # plt.title(f"Detection of outlier subsequences for timeseries {ts_code}")
+    # plt.xticks(rotation=15)
+    # plt.xlabel("Datetime")
+    # plt.ylabel("Active power (W)")
+    # plt.show()
+
 
     # ALMOST ZERO VALUES DUE TO WRONG INTERPOLATION IN THE ORIGINAL TIME SERIES
     # Almost zero values are considered outliers since they usually occur from differentiation
@@ -101,6 +133,32 @@ def detect_invalid(
     series_enriched.loc[(series_enriched['Measurements'] <= zero_threshold) &
                         (series_enriched['Anomaly'] == 1 ),
                         'Anomaly'] = int(-1)
+
+    # # Necessary only for the following plot
+    # zero_outliers = series_enriched[series_enriched['Anomaly'] == -1]
+    # zero_outliers = zero_outliers['Measurements'].values.tolist()
+    # zero_measurements = series_enriched.loc[series_enriched['Measurements'].isin(zero_outliers),
+    #                                         ['DateTime', 'Measurements']]
+    # zero_measurements['DateTime'] = pd.to_datetime(zero_measurements['DateTime'])
+
+    # series_enriched['DateTime'] = pd.to_datetime(series_enriched['DateTime'])
+    # series_enriched = series_enriched.set_index('DateTime')
+
+    # _, ax = plt.subplots()
+    # ax.plot(series_enriched['Measurements'], color='blue', label = 'Normal', alpha=0.7)
+    # ax.scatter(zero_measurements['DateTime'],
+    #            zero_measurements['Measurements'],
+    #            color='red',
+    #            label = 'Outlier',
+    #            marker='x',
+    #            alpha=0.9)
+    # plt.axhline(y=zero_threshold, color='black', linestyle='--', label='Threshold', alpha=0.7)
+    # plt.legend()
+    # plt.title(f"Detection of small valued outliers for timeseries {ts_code}")
+    # plt.xticks(rotation=15)
+    # plt.xlabel("Datetime")
+    # plt.ylabel("Active power (W)")
+    # plt.show()
 
 
     # FIND EXTREME OUTLIERS BASED ON THE IQR OF THE VALID POINTS' DISTRIBUTION
@@ -132,6 +190,41 @@ def detect_invalid(
                         (series_enriched['Anomaly'] == 1 ),
                         'Anomaly'] = int(-1)
 
+    # # Necessary only for the following plots
+    # outliers = series_enriched[series_enriched['Anomaly'] == -1]
+    # outliers = outliers['Measurements'].values.tolist()
+    # measurements = series_enriched.loc[series_enriched['Measurements'].isin(outliers),
+    #                                    ['DateTime', 'Measurements']]
+    # measurements['DateTime'] = pd.to_datetime(measurements['DateTime'])
+
+    # series_enriched['DateTime'] = pd.to_datetime(series_enriched['DateTime'])
+    # series_enriched = series_enriched.set_index('DateTime')
+
+    # _, ax = plt.subplots()
+    # ax.plot(series_enriched['Measurements'], color='blue', label = 'Normal', alpha=0.7)
+    # ax.scatter(measurements['DateTime'],
+    #            measurements['Measurements'],
+    #            color='red',
+    #            label = 'Outlier',
+    #            marker='x',
+    #            alpha=0.9)
+    # plt.axhline(y=lower_bound, color='black', linestyle='-.', label='Lower bound', alpha=0.7)
+    # plt.axhline(y=upper_bound, color='black', linestyle='--', label='Upper Bound', alpha=0.7)
+    # plt.legend()
+    # plt.title(f"Detection of extreme outliers for timeseries {ts_code}")
+    # plt.xticks(rotation=15)
+    # plt.xlabel("Datetime")
+    # plt.ylabel("Active power (W)")
+    # plt.show()
+
+    # plt.figure()
+    # series_enriched['Measurements'].plot.hist(bins=100, alpha=0.8)
+    # plt.legend()
+    # plt.title(f"Distribution of timeseries {ts_code}")
+    # plt.xticks(rotation=15)
+    # plt.xlabel("Active power (W)")
+    # plt.show()
+
     return series_enriched
 
 
@@ -159,10 +252,11 @@ def interpolate(series_enriched: pd.DataFrame) -> None:
         anomaly_hour = series_enriched.loc[series_enriched['DateTime'] == anomaly_idx,
                                            'Hour'].values[0]
 
-        # Measurements with the same weekday and hour tags
+        # Valid measurements with the same weekday and hour tags
         similar_measurements = series_enriched.loc[
             (series_enriched['Weekday'] == anomaly_weekday) &
-            (series_enriched['Hour'] == anomaly_hour),
+            (series_enriched['Hour'] == anomaly_hour) &
+            (series_enriched['Anomaly'] == 1),
             'Measurements']
 
         series_enriched.loc[series_enriched['DateTime'] == anomaly_idx,
@@ -207,12 +301,32 @@ def preprocess(
 
             file_path = root + '/' + file
             series = pd.read_csv(file_path)
+            # series['DateTime'] = pd.to_datetime(series['DateTime'])
             series = series.set_index('DateTime')
 
             # When the series comes from the initial part of the original time series,
             # then the first value is usuall NaN. As a result, it's better to always remove
             # the first value.
             series = series.iloc[1:]
+
+            # # Plot sliced timeseries
+            # ts_code = file[:-4]
+
+            # plt.rcParams["figure.figsize"] = (10, 8)
+            # plt.rc('axes', titlesize=14)     # fontsize of the axes title
+            # plt.rc('axes', labelsize=14)    # fontsize of the x and y labels
+            # plt.rc('xtick', labelsize=10)    # fontsize of the tick labels
+            # plt.rc('ytick', labelsize=10)    # fontsize of the tick labels
+            # plt.rc('legend', fontsize=10)    # legend fontsize
+            # plt.rc('figure', titlesize=14)  # fontsize of the figure title
+
+            # plt.figure()
+            # plt.plot(series, color='b', alpha=0.8, label='Sliced timeseries')
+            # plt.title(f"Sliced time series {ts_code} before preprocessing")
+            # plt.xlabel("Datetime")
+            # plt.ylabel("Active power (W)")
+            # plt.xticks(rotation=15)
+            # plt.show()
 
             # Detect anomalies/outliers
             series_enriched = detect_invalid(series,
@@ -222,13 +336,40 @@ def preprocess(
                                              iqr_lower_ratio,
                                              iqr_upper_ratio)
 
+            # old_series = series_enriched.loc[:, ['DateTime', 'Measurements']]
+
             # Proper time series interpolation
             interpolate(series_enriched)
+
+            # old_series['DateTime'] = pd.to_datetime(old_series['DateTime'])
+            # old_series = old_series.set_index('DateTime')
+
+            # series_after = series_enriched.loc[:, ['DateTime', 'Measurements']]
+            # series_after['DateTime'] = pd.to_datetime(series_after['DateTime'])
+            # series_after = series_after.set_index('DateTime')
+
+            # _, ax = plt.subplots()
+            # ax.plot(old_series['Measurements'],
+            #         color='red',
+            #         alpha=0.7,
+            #         label='Before preprocessing')
+            # ax.plot(series_after['Measurements'],
+            #         color='blue',
+            #         alpha=0.7,
+            #         label='After preprocessing')
+            # plt.title(f"Time series {ts_code} before and after preprocessing")
+            # plt.xlabel("Datetime")
+            # plt.ylabel("Active power (W)")
+            # plt.xticks(rotation=15)
+            # plt.legend()
+            # plt.show()
 
             # Output preprocessed time series to a .csv file
             preprocessed_filename = preprocessed_dir_name + file
             series_enriched.loc[:, ['DateTime', 'Measurements']].to_csv(preprocessed_filename,
                                                                         index=False)
+
+            # input("Press enter to continue...")
 
 
 def main() -> None:

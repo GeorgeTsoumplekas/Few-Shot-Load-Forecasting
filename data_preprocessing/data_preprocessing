@@ -4,10 +4,10 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-python3 ./source/slice.py --raw_dir "../data/iONA_new/" \
-                          --config "./slice_config.yaml"
+python3 ./data_preprocessing/source/slice.py --raw_dir "./data/iONA_new/" \
+                                             --config "./data_preprocessing/slice_config.yaml"
 
-python3 ./source/preprocess.py --sliced_dir "../data/iONA_new_sliced/" \
-                               --config "./preprocess_config.yaml"
+python3 ./data_preprocessing/source/preprocess.py --sliced_dir "./data/iONA_new_sliced/" \
+                                                  --config "./data_preprocessing/preprocess_config.yaml"
 
 rm -rf ../data/iONA_new_sliced/

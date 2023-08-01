@@ -16,6 +16,7 @@ from time import time
 import warnings
 import yaml
 
+# from matplotlib import pyplot as plt
 import pandas as pd
 
 
@@ -157,7 +158,7 @@ def find_useful_parts(
     min_length: str,
     acceptable_length: str,
     ) -> pd.DataFrame:
-    """Find the useful parts of the time series based on their legth and values and save them.
+    """Find the useful parts of the time series' based on their length and values and save them.
 
     A three pointers technique is used to find the useful parts. A part is considered useful when
     it's not flat and its length is long enough. Flat parts are generally considered non useful
@@ -281,25 +282,92 @@ def slicing(
     if not os.path.exists(sliced_dir_name):
         os.makedirs(sliced_dir_name)
 
+    # # Plot parameters
+    # plt.rcParams["figure.figsize"] = (10,8)
+    # plt.rc('axes', titlesize=14)     # fontsize of the axes title
+    # plt.rc('axes', labelsize=14)    # fontsize of the x and y labels
+    # plt.rc('xtick', labelsize=10)    # fontsize of the tick labels
+    # plt.rc('ytick', labelsize=10)    # fontsize of the tick labels
+    # plt.rc('legend', fontsize=10)    # legend fontsize
+    # plt.rc('figure', titlesize=14)  # fontsize of the figure title
+
+    # # Plots directory
+    # plots_target_dir = './outlier_plots/'
+    # if not os.path.exists(plots_target_dir):
+    #     os.makedirs(plots_target_dir)
+
     for root, _, files in os.walk(raw_dir, topdown=False):
-        for file in files:
+        for i, file in enumerate(files):
             filename = root + file
             timeseries_code = filename[-45:-25]
 
             first_diff = create_first_differences(filename)
+
+            # plt.figure(figsize=(10, 8))
+
+            # fig, axs = plt.subplots(2)
+            # axs[0].plot(first_diff, color='r', alpha=0.7, label='Before removing outliers')
+
             remove_outliers(first_diff, outlier_threshold)
 
+            # plt.plot(first_diff, color='b', alpha=0.8, label='First differences')
+
+            # axs[1].plot(first_diff, color='b', alpha=0.7, label='After removing outliers')
+
+            # # axs[0].set(xlabel='Datetime')
+            # axs[1].set(xlabel='Datetime')
+
+            # axs[0].set(ylabel='Power (W)')
+            # axs[1].set(ylabel='Power (W)')
+
+            # axs[0].legend()
+            # axs[1].legend()
+
+            # fig.suptitle(f"Outliers in timeseries {timeseries_code[:-1]}")
+            # plt.legend()
+            # plt.show()
+
+            # # plots_target_filename = plots_target_dir + timeseries_code[:-1] + '.png'
+            # # plt.savefig(plots_target_filename, dpi=150)
+
             sec_diff = create_second_differences(first_diff)
+
+            # plt.plot(sec_diff['Measurements'], color='r', alpha=0.6, label='Second differences')
+            # plt.xticks(rotation=30)
+            # plt.xlabel('Datetime')
+            # plt.ylabel('Power (W)')
+            # plt.title(f"Time series {timeseries_code[:-1]}")
+            # plt.legend()
+            # plt.show()
+
             crosses = find_crosspoints(sec_diff, cross_threshold)
 
             # If no crosses exist this means that either the whole series is useful or useless.
             # For simplicity reasons it's just easier to skip such time series, since they are
-            # rare and do not affect immensely the results.
+            # rare and do not immensely affect the results.
             if len(crosses) == 0:
                 continue
 
             chunks = find_useful_parts(crosses, sec_diff, min_length, acceptable_length)
+
+            # plt.figure(figsize=(10, 8))
+            # plt.plot(first_diff, color='r', alpha=0.7, label='Discarded part')
+            # for i, (_, date) in enumerate(chunks.iterrows()):
+            #     useful_part = first_diff['Measurements'][date['start']:date['end']]
+            #     plt.plot(useful_part, color='b', alpha=0.9-i*0.25, label=f"Useful part {i+1}")
+            # plt.xticks(rotation=30)
+            # plt.xlabel('Datetime')
+            # plt.ylabel('Power (W)')
+            # plt.title(f"Slicing of timeseries {timeseries_code[:-1]}")
+            # plt.legend()
+            # plt.show()
+
+            # plots_target_filename = plots_target_dir + timeseries_code[:-1] + '.png'
+            # plt.savefig(plots_target_filename, dpi=150)
+
             save_useful_parts(chunks, sliced_dir_name, timeseries_code, first_diff)
+
+            print(f"{i+1}|{len(files)}")
 
 
 def main() -> None:
