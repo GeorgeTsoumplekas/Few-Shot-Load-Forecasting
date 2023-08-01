@@ -4,6 +4,10 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+python3 ./data_aggregation/source/pool_split.py --config "./data_aggregation/pool_config.yaml"
+
+# rm -rf ../data/iONA_new_sliced_preprocessed/
+
 python3 ./data_aggregation/source/segments_metadata.py --data_dir "./data/iONA_train/"
 python3 ./data_aggregation/source/segments_metadata.py --data_dir "./data/iONA_test/"
 

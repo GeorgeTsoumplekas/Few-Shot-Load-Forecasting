@@ -1,0 +1,4 @@
+---
+ seed: 42
+ train_test_split: 0.8
+ source_dir: './data/iONA_new_sliced_preprocessed/'
