@@ -93,7 +93,7 @@ def monthly_segments(ts_lengths):
             month_start = month_starts[i]
             month_end = month_starts[i+1]
 
-            # Check if it is insede the boundaries of the time series
+            # Check if it is inside the boundaries of the time series
             if (month_start >= start) & (month_end <= end):
                 date = month_start.strftime('%Y-%m')
                 one_month_segments[date][index] = 1
