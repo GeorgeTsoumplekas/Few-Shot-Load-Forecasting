@@ -4,7 +4,6 @@
     week_num: 1
     pred_days: 1
     test_days: 7
-    epsilon: 0.1
  opt_config:
     seed: 42
     task_batch_size: 1
