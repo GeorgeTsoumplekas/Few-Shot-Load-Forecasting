@@ -14,6 +14,7 @@ python3 train.py --filepath "path/to/raw_time_series --config "path/to/config.ya
 
 import argparse
 import os
+from time import time
 import yaml
 
 from matplotlib import pyplot as plt
@@ -55,16 +56,12 @@ def objective(trial, x_train, y_train, ht_config):
         'scheduler_threshold': float(ht_config['scheduler_threshold']),
         'loss': ht_config['loss'],
         'lstm_hidden_units': ht_config['lstm_hidden_units'],
-        'kappa': trial.suggest_float('kappa',
-                                     ht_config['kappa']['lower_bound'],
-                                     ht_config['kappa']['upper_bound']),
+        'linear_layers': ht_config['linear_layers'],
+        'epochs': ht_config['epochs'],
         'learning_rate': trial.suggest_float('learning_rate',
                                              float(ht_config['learning_rate']['lower_bound']),
                                              float(ht_config['learning_rate']['upper_bound']),
-                                             log=ht_config['learning_rate']['log']),
-        'epochs': trial.suggest_int('epochs',
-                                    int(ht_config['epochs']['lower_bound']),
-                                    int(ht_config['epochs']['upper_bound']))
+                                             log=ht_config['learning_rate']['log'])
     }
 
     # Set random seed for reproducibility purposes
@@ -81,7 +78,7 @@ def objective(trial, x_train, y_train, ht_config):
     scheduler_patience = config['scheduler_patience']
     scheduler_threshold = config['scheduler_threshold']
     loss = config['loss']
-    kappa = config['kappa']
+    num_lin_layers = config['linear_layers']
 
     results = {}  # Contains the validation loss of each fold
 
@@ -90,6 +87,8 @@ def objective(trial, x_train, y_train, ht_config):
 
     # Cross-validation loop
     for i, (train_idx, val_idx) in enumerate(tscv.split(x_train)):
+        fold_start = time()
+
         x_train_fold = x_train[train_idx]
         y_train_fold = y_train[train_idx]
         x_val_fold = x_train[val_idx]
@@ -101,13 +100,17 @@ def objective(trial, x_train, y_train, ht_config):
                                                                     x_val_fold,
                                                                     y_val_fold,
                                                                     batch_size)
-        network = model_builder.build_network(1, y_train.shape[1], lstm_hidden_units, device)
+        network = model_builder.build_network(input_shape=1,
+                                              output_shape=y_train.shape[1],
+                                              hidden_units=lstm_hidden_units,
+                                              num_lin_layers=num_lin_layers,
+                                              device=device)
         optimizer = engine.build_optimizer(network, learning_rate)
         scheduler = engine.build_scheduler(optimizer,
                                            scheduler_factor,
                                            scheduler_patience,
                                            scheduler_threshold)
-        loss_fn = losses.get_loss(loss, kappa, device)
+        loss_fn = losses.get_loss(loss)
 
         # Training loop
         for _ in range(num_epochs):
@@ -118,6 +121,9 @@ def objective(trial, x_train, y_train, ht_config):
         val_loss, _ = engine.evaluate(network, val_dataloader, loss_fn, device)
         results[i] = val_loss
         trial.report(val_loss, i)
+
+        fold_end = time()
+        print(f"Fold {i+1}|{k_folds} / elpased time: {fold_end-fold_start:.2f}s")
 
     val_loss_sum = 0.0
     for _, value in results.items():
@@ -158,7 +164,7 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
     scheduler_patience = opt_config['scheduler_patience']
     scheduler_threshold = opt_config['scheduler_threshold']
     loss = opt_config['loss']
-    kappa = opt_config['kappa']
+    num_lin_layers = opt_config['linear_layers']
 
     # Get the dataloaders, model, optimizer, scheduler and loss function
     train_dataloader, test_dataloader = data_setup.build_dataset(x_train,
@@ -166,21 +172,24 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
                                                       x_test,
                                                       y_test,
                                                       batch_size)
-    network = model_builder.build_network(1, y_train.shape[1], lstm_hidden_units, device)
+    network = model_builder.build_network(input_shape=1,
+                                          output_shape=y_train.shape[1],
+                                          hidden_units=lstm_hidden_units, 
+                                          num_lin_layers=num_lin_layers,
+                                          device=device)
     optimizer = engine.build_optimizer(network, learning_rate)
     scheduler = engine.build_scheduler(optimizer,
                                        scheduler_factor,
                                        scheduler_patience,
                                        scheduler_threshold)
-    loss_fn = losses.get_loss(loss, kappa, device)
+    loss_fn = losses.get_loss(loss)
 
     # Train and test losses on each epoch
     train_losses = {}
     test_losses = {}
 
-    # TODO: Maybe the states should be reset after each epoch?
-
     # Training loop
+    train_start = time()
     for epoch in range(num_epochs):
         train_loss = engine.train_epoch(network, train_dataloader, optimizer, loss_fn, device)
         train_losses[epoch] = train_loss
@@ -189,14 +198,17 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
         test_losses[epoch] = test_loss
 
         scheduler.step(train_loss)
+    train_end = time()
+    print(f"Optimal training elapsed time: {train_end-train_start:.2f}s")
 
     # Prediction plots
     _, y_preds = engine.evaluate(network, test_dataloader, loss_fn, device)
     utils.plot_predictions(y_test, y_preds, results_dir_name)
 
     # MAPE calculation on original scale
-    y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), results_dir_name, loss)
+    y_preds_raw = data_setup.denormalized_preds(torch.tensor(y_preds), results_dir_name)
     mape = losses.MAPE(y_preds_raw, y_test_raw)
+    malpe = losses.MALPE(y_preds_raw, y_test_raw)
 
     # Save optimal model
     utils.save_optimal_model(network, results_dir_name)
@@ -204,7 +216,8 @@ def train_optimal(opt_config, x_train, y_train, x_test, y_test, y_test_raw, resu
     task_log = pd.DataFrame({'loss_type': loss,
                               'loss_value': [test_losses[num_epochs-1]],
                               'length': [len(train_dataloader)*7],
-                              'MAPE': [mape]})
+                              'MAPE': [mape],
+                              'MALPE': [malpe]})
 
     # Save logs as .csv file
     utils.save_validation_logs(task_log, results_dir_name)
@@ -270,10 +283,10 @@ def hyperparameter_tuning(n_trials, results_dir_name, x_train, y_train, ht_confi
         'scheduler_patience': int(ht_config['scheduler_patience']),
         'scheduler_threshold': float(ht_config['scheduler_threshold']),
         'learning_rate': best_trial['params_learning_rate'].values[0],
-        'epochs': best_trial['params_epochs'].values[0],
+        'epochs': ht_config['epochs'],
         'lstm_hidden_units': ht_config['lstm_hidden_units'],
         'loss': ht_config['loss'],
-        'kappa': best_trial['params_kappa'].values[0],
+        'linear_layers': ht_config['linear_layers']
     }
 
     return opt_config

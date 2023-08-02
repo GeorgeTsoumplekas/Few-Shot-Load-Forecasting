@@ -34,7 +34,7 @@ def build_scheduler(optimizer, factor, patience, threshold):
         factor: A float that determines the factor by which the learning rate will be reduced.
         patience: An integer that defines the number of epochs with no improvement after which
             learning rate will be reduced.
-        threshold: A float that determines the threshold for measuring the new optimum, 
+        threshold: A float that determines the threshold for measuring the new optimum,
             to only focus on significant changes
 
     Returns:
@@ -68,6 +68,10 @@ def train_epoch(network, train_dataloader, optimizer, loss_fn, device):
 
     network.train()
     train_loss = 0.0
+
+    # Reset model state prior to seeing the time series again
+    network.reset_states()
+
     for x_sample, y_sample in train_dataloader:
         x_sample, y_sample = x_sample.to(device), y_sample.to(device)
         y_pred = network(x_sample)
