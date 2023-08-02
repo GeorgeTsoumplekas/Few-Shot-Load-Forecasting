@@ -10,7 +10,7 @@ hyperparameter tuning.
 
 Typical usage example:
 python3 train.py --train_dir "path/to/train_dir" \
-                 --test_dir "path/to/train_dir" \
+                 --test_dir "path/to/test_dir" \
                  --config "path/to/config.yaml"
 """
 
@@ -18,6 +18,7 @@ python3 train.py --train_dir "path/to/train_dir" \
 
 import argparse
 import os
+from time import time
 import yaml
 
 from matplotlib import pyplot as plt
@@ -58,10 +59,8 @@ def objective(trial, ht_config, data_config, data_filenames):
         'seed': ht_config['seed'],
         'loss': ht_config['loss'],
         'lstm_hidden_units': ht_config['lstm_hidden_units'],
+        'linear_layers': ht_config['linear_layers'],
         'finetune_epochs': ht_config['finetune_epochs'],
-        'kappa': trial.suggest_float('kappa',
-                                     ht_config['kappa']['lower_bound'],
-                                     ht_config['kappa']['upper_bound']),
         'learning_rate': trial.suggest_float('learning_rate',
                                              float(ht_config['learning_rate']['lower_bound']),
                                              float(ht_config['learning_rate']['upper_bound']),
@@ -82,10 +81,10 @@ def objective(trial, ht_config, data_config, data_filenames):
     task_batch_size = config['task_batch_size']
     sample_batch_size = config['sample_batch_size']
     lstm_hidden_units = config['lstm_hidden_units']
+    num_lin_layers = config['linear_layers']
     learning_rate = config['learning_rate']
     output_shape = data_config['pred_days']*data_config['day_measurements']
     loss = config['loss']
-    kappa = config['kappa']
 
     results = {}  # Contains the validation loss of each fold
 
@@ -95,6 +94,7 @@ def objective(trial, ht_config, data_config, data_filenames):
 
     # Cross-validation loop
     for fold, (train_idx,val_idx) in enumerate(kfold.split(data_filenames)):
+        fold_start = time()
 
         # Tasks used for training within this fold
         train_filenames = [data_filenames[idx] for idx in train_idx]
@@ -112,9 +112,13 @@ def objective(trial, ht_config, data_config, data_filenames):
                                                           task_batch_size,
                                                           False)
 
-        network = model_builder.build_network(1, output_shape, lstm_hidden_units, device)
+        network = model_builder.build_network(input_shape=1,
+                                              output_shape=output_shape,
+                                              hidden_units=lstm_hidden_units,
+                                              num_lin_layers=num_lin_layers,
+                                              device=device)
         optimizer = engine.build_optimizer(network, learning_rate)
-        loss_fn = losses.get_loss(loss, kappa, device)
+        loss_fn = losses.get_loss(loss)
 
         # Train model using the train tasks
         for _ in range(num_train_epochs):
@@ -134,6 +138,7 @@ def objective(trial, ht_config, data_config, data_filenames):
             finetuned_network = model_builder.build_network(input_shape=1,
                                                             output_shape=output_shape,
                                                             hidden_units=lstm_hidden_units,
+                                                            num_lin_layers=num_lin_layers,
                                                             device=device)
             finetuned_network.load_state_dict(network.state_dict())
             finetuned_network.to(device)
@@ -166,6 +171,9 @@ def objective(trial, ht_config, data_config, data_filenames):
         # Total validation loss for the specific fold
         val_loss /= len(val_tasks_dataloader)
         results[fold] = val_loss
+
+        fold_end = time()
+        print(f"Fold {fold+1}|{k_folds} / elpased time: {fold_end-fold_start:.2f}s")
 
     val_loss_sum = 0.0
     for _, value in results.items():
@@ -230,7 +238,7 @@ def hyperparameter_tuning(n_trials, results_dir_name, ht_config, data_config, da
         'sample_batch_size': ht_config['sample_batch_size'],
         'seed': ht_config['seed'],
         'loss': ht_config['loss'],
-        'kappa': best_trial['params_kappa'].values[0],
+        'linear_layers': ht_config['linear_layers'],
         'learning_rate': best_trial['params_learning_rate'].values[0],
         'train_epochs': best_trial['params_train_epochs'].values[0],
         'finetune_epochs': ht_config['finetune_epochs'],
@@ -267,7 +275,7 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     learning_rate = opt_config['learning_rate']
     output_shape = data_config['pred_days']*data_config['day_measurements']
     loss = opt_config['loss']
-    kappa = opt_config['kappa']
+    num_lin_layers = opt_config['linear_layers']
 
     # Create dataloader for the training tasks
     train_tasks_dataloader = data_setup.build_tasks_set(data_filenames,
@@ -279,14 +287,17 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
     network = model_builder.build_network(input_shape=1,
                                           output_shape=output_shape,
                                           hidden_units=lstm_hidden_units,
+                                          num_lin_layers=num_lin_layers,
                                           device=device)
     optimizer = engine.build_optimizer(network, learning_rate)
-    loss_fn = losses.get_loss(loss, kappa, device)
+    loss_fn = losses.get_loss(loss)
 
     train_losses = []
 
     # Model training using training tasks
-    for _ in range(num_epochs):
+    print()
+    for epoch in range(num_epochs):
+        epoch_start = time()
         train_loss = engine.train_epoch(network,
                                         train_tasks_dataloader,
                                         loss_fn,
@@ -295,6 +306,10 @@ def train_optimal(opt_config, data_config, data_filenames, results_dir_name):
                                         sample_batch_size,
                                         data_config)
         train_losses.append(train_loss)
+        epoch_end = time()
+        print(f"Epoch {epoch+1}|{num_epochs} / "
+              f"elapsed time {epoch_end-epoch_start:.2f}s / "
+              f"mean train loss: {train_loss:.3f}")
 
     utils.plot_train_loss(train_losses, results_dir_name, loss)
 
@@ -332,7 +347,7 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
     output_shape = data_config['pred_days']*data_config['day_measurements']
     model_save_path = results_dir_name + 'optimal_trained_model.pth'
     loss = opt_config['loss']
-    kappa = opt_config['kappa']
+    num_lin_layers = opt_config['linear_layers']
 
     # Get the dataloader for the set of test tasks
     test_tasks_dataloader = data_setup.build_tasks_set(test_filenames,
@@ -341,7 +356,10 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
                                                        False)
 
     # Fine-tuning process for each test task
-    for test_task_data, test_timeseries_code in test_tasks_dataloader:
+    print()
+    for i, (test_task_data, test_timeseries_code) in enumerate(test_tasks_dataloader):
+        task_start = time()
+
         # Each task has an assigned directory to save relative results
         target_dir_name = results_dir_name + test_timeseries_code[0] + '/'
         if not os.path.exists(target_dir_name):
@@ -349,13 +367,17 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
 
         # Each fine-tuned network is derived from the same trained model
         # but is different for each validation task, since it's fine-tuned in different data.
-        network = model_builder.build_network(1, output_shape, lstm_hidden_units, device)
+        network = model_builder.build_network(input_shape=1,
+                                              output_shape=output_shape,
+                                              hidden_units=lstm_hidden_units,
+                                              num_lin_layers=num_lin_layers,
+                                              device=device)
         network.load_state_dict(torch.load(f=model_save_path))
 
         # Define an optimizer for the new model
         optimizer = engine.build_optimizer(network, learning_rate)
 
-        loss_fn = losses.get_loss(loss, kappa, device)
+        loss_fn = losses.get_loss(loss)
 
         finetune_losses = []
         test_losses = []
@@ -392,16 +414,21 @@ def finetune_optimal(opt_config, data_config, test_filenames, results_dir_name):
         utils.plot_predictions(y_test, y_preds, target_dir_name)
 
         # MAPE calculation on original scale
-        y_preds_raw = data_setup.unstandardized_preds(torch.tensor(y_preds), target_dir_name, loss)
+        y_preds_raw = data_setup.denormalized_preds(torch.tensor(y_preds), target_dir_name)
         mape = losses.MAPE(y_preds_raw, y_task_test_raw)
+        malpe = losses.MALPE(y_preds_raw, y_task_test_raw)
 
         task_log = pd.DataFrame({'loss_type': loss,
                                  'loss_value': [test_losses[num_epochs-1]],
                                  'length': [len(finetune_dataloader)*7],
-                                 'MAPE': [mape]})
+                                 'MAPE': [mape],
+                                 'MALPE': [malpe]})
 
         # Save logs as .csv file
         utils.save_validation_logs(task_log, target_dir_name)
+
+        task_end = time()
+        print(f"Task {i+1}|{len(test_tasks_dataloader)} / elapsed time {task_end-task_start:.2f}s")
 
 
 def main():

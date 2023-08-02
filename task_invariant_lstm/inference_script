@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Bash Strict Mode
+set -euo pipefail
+IFS=$'\n\t'
+
+python3 ./task_invariant_lstm/source/inference.py --test_dir "./data/iONA_test_aggregated/" \
+                                                  --weights_dir "./task_invariant_lstm/opt_weights/" \
+                                                  --config "./task_invariant_lstm/inference_config.yaml"

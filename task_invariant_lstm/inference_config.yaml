@@ -4,20 +4,13 @@
     week_num: 1
     pred_days: 1
     test_days: 7
- n_trials: 10
- ht_config:
-    k_folds: 3
+    epsilon: 0.1
+ opt_config:
     seed: 42
     task_batch_size: 1
     sample_batch_size: 1
+    linear_layers: 2
     loss: 'MSE'
     lstm_hidden_units: 32
-    linear_layers: 2
     finetune_epochs: 5
-    learning_rate:
-      lower_bound: 1e-5
-      upper_bound: 1e-3
-      log: true
-    train_epochs:
-      lower_bound: 10
-      upper_bound: 40
+    learning_rate: 

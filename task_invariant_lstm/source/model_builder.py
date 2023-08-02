@@ -22,14 +22,14 @@ class LSTMModel(nn.Module):
         output_shape: An integer that defines the number of measurements in the predicted
             subsequence.
         hidden_units: An integer that defines the number of units in the LSTM layer.
-        lstm: A default torch nn.LSTM layer.
-        linear: A default torch nn.Linear layer.
+        num_lin_layers: An integer that defines the number of linear layers in the model.
+        layer_dict: A torch module dictionary whose entries are the layers of the model.
         h_n: A torch.Tensor that represents the LSTM's hidden state.
         c_n: A torch.Tensor that represents the LSTM's cell state.
         device: A string that defines the device on which the model should be loaded onto.
     """
 
-    def __init__(self, input_shape, output_shape, hidden_units, device):
+    def __init__(self, input_shape, output_shape, hidden_units, num_lin_layers, device):
         """Init LSTMModel with specified input/output shape and number of LSTM units."""
 
         super().__init__()
@@ -37,9 +37,21 @@ class LSTMModel(nn.Module):
         self.hidden_units = hidden_units
         self.input_shape = input_shape
         self.output_shape = output_shape
+        self.num_lin_layers = num_lin_layers
 
-        self.lstm = nn.LSTM(input_shape, self.hidden_units, batch_first=True)
-        self.linear = nn.Linear(self.hidden_units, self.output_shape)
+        self.layer_dict = nn.ModuleDict()
+        self.layer_dict['lstm'] = nn.LSTM(input_shape, self.hidden_units, batch_first=True)
+
+        # Create linear layers - their number varies
+        for i in range(self.num_lin_layers):
+            lin_layer_name = 'linear_' + str(i+1)
+
+            # Last linear layer
+            if i==self.num_lin_layers-1:
+                self.layer_dict[lin_layer_name] = nn.Linear(self.hidden_units, self.output_shape)
+            # Intermediate linear layers
+            else:
+                self.layer_dict[lin_layer_name] = nn.Linear(self.hidden_units, self.hidden_units)
 
         self.h_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(device)
         self.c_n = torch.zeros(1,1,self.hidden_units, dtype=torch.float32).to(device)
@@ -70,13 +82,23 @@ class LSTMModel(nn.Module):
             # samples to be inferred are not necessarily fed sequentially to the model.
             self.reset_states()
 
-        output, (self.h_n, self.c_n) = self.lstm(network_input, (self.h_n, self.c_n))
+        output, (self.h_n, self.c_n) = self.layer_dict['lstm'](network_input, (self.h_n, self.c_n))
         output = output.view(-1, self.hidden_units)
-        output = self.linear(output)[-1].unsqueeze(dim=0)
+
+        for i in range(self.num_lin_layers):
+            lin_layer_name = 'linear_' + str(i+1)
+
+            # Last linear layer
+            if i==self.num_lin_layers-1:
+                output = self.layer_dict[lin_layer_name](output)[-1].unsqueeze(dim=0)
+            # Intermediate linear layers
+            else:
+                output = self.layer_dict[lin_layer_name](output)
+
         return output
 
 
-def build_network(input_shape, output_shape, hidden_units, device):
+def build_network(input_shape, output_shape, hidden_units, num_lin_layers, device):
     """Initialize the custom LSTM model and load it to the spicified device for training.
 
     Args:
@@ -84,10 +106,11 @@ def build_network(input_shape, output_shape, hidden_units, device):
         output_shape: An integer that defines the number of measurements in the predicted
             subsequence.
         hidden_units: An integer that defines the number of units in the LSTM layer.
+        num_lin_layers: An integer that defines the number of linear layers of the model.
         device: A string that defines the device on which the model should loaded onto.
     Returns:
         An initialized custom LSTM model ready to be trained.
     """
 
-    network = LSTMModel(input_shape, output_shape, hidden_units, device).to(device)
+    network = LSTMModel(input_shape, output_shape, hidden_units, num_lin_layers, device).to(device)
     return network

@@ -308,31 +308,21 @@ def build_test_task(test_task_data, sample_batch_size, data_config, target_dir_n
     return train_dataloader, test_dataloader, y_task_test_raw
 
 
-def save_standardization_settings(train_mean,
-                                  train_std,
-                                  epsilon,
-                                  y_task_test_min,
-                                  target_dir_name):
+def save_normalization_settings(y_min, y_max, target_dir_name):
     """Save variables used in transforming the raw data as a .csv file.
 
     This is necessary for re-transforming the data back to its original scale later.
 
     Args:
-        train_mean: A torch tensor that contains the mean value of the train set's input
-            subsequences.
-        train_std: A torch tensor that contains the standard deviation value of the train set's
-            input subsequences.
-        epsilon: A float that is the distance of minimum sample value in the test set output
-            subsequences from 0.
-        y_test_min: A torch tensor that contains the minimum value in the output subsequences of
-            the test set.
+        y_min: A torch tensor that contains the minimum value of the output subsequneces.
+        y_max: A torch tensor that contains the maximum value of the output subsequences.
         target_dir_name: A string with the name of the directory the results will be saved.
     """
 
-    standardization_settings = pd.DataFrame({'train_mean': [train_mean.item()],
-                  'train_std': [train_std.item()],
-                  'epsilon': [epsilon],
-                  'y_test_min': [y_task_test_min.item()]})
+    standardization_settings = pd.DataFrame({
+        'y_min': [y_min.item()],
+        'y_max': [y_max.item()],
+    })
 
     filepath = target_dir_name + 'settings.csv'
     standardization_settings.to_csv(filepath, index=False)
@@ -357,7 +347,6 @@ def split_train_task(task_data, data_config):
     day_measurements = data_config['day_measurements']
     week_num = data_config['week_num']
     pred_days = data_config['pred_days']
-    epsilon = data_config['epsilon']
 
     # Number of days in each input subsequence
     x_seq_days = week_num*7
@@ -377,14 +366,10 @@ def split_train_task(task_data, data_config):
     x_train_seqs = (total_days - pred_days) // x_seq_days
 
     # Normalize training set
-    task_data_mean = torch.mean(task_data)
-    task_data_std = torch.std(task_data)
-    task_data = (task_data - task_data_mean) / task_data_std
-
-    # Shift values to be positive (to avoid division with zero when calculating the
-    # log likelihood gamma regression loss function)
     task_data_min = torch.min(task_data)
-    task_data += (torch.abs(task_data_min) + epsilon)
+    task_data_max = torch.max(task_data)
+
+    task_data = 2*(task_data-task_data_min)/(task_data_max-task_data_min) - 1
 
     for i in range(x_train_seqs):
         x_slice = task_data[i*x_seq_measurements:(i+1)*x_seq_measurements]
@@ -421,7 +406,6 @@ def split_test_task(task_data, data_config, target_dir_name):
     week_num = data_config['week_num']
     pred_days = data_config['pred_days']
     test_days = data_config['test_days']
-    epsilon = data_config['epsilon']
 
     # Number of days in each input subsequence
     x_seq_days = week_num*7
@@ -461,46 +445,31 @@ def split_test_task(task_data, data_config, target_dir_name):
         x_task_test = torch.vstack((x_task_test, x_slice))
         y_task_test = torch.vstack((y_task_test, y_slice))
 
-    # Unstandardized version of y_test
+    # Original version of y_test
     y_task_test_raw = y_task_test
 
-    # Normalize using the mean and std of the training set (to avoid data leakage)
-    train_mean = x_task_train.reshape((-1,)).mean()
-    train_std = x_task_train.reshape((-1,)).std()
-
-    x_task_train = (x_task_train - train_mean) / train_std
-    y_task_train = (y_task_train - train_mean) / train_std
-
-    x_task_test = (x_task_test - train_mean) / train_std
-    y_task_test = (y_task_test - train_mean) / train_std
-
-    # Shift subsequences to be positive (to avoid division with zero when calculating the
-    # log likelihood gamma regression loss function)
+    # Normalize in range [-1, 1]
     x_task_train_min = torch.min(x_task_train.view(-1))
-    x_task_train += (torch.abs(x_task_train_min) + epsilon)
-
-    x_task_test_min = torch.min(x_task_test.view(-1))
-    x_task_test += (torch.abs(x_task_test_min) + epsilon)
+    x_task_train_max = torch.max(x_task_train.view(-1))
 
     y_task_train_min = torch.min(y_task_train.view(-1))
-    y_task_train += (torch.abs(y_task_train_min) + epsilon)
+    y_task_train_max = torch.max(y_task_train.view(-1))
 
-    y_task_test_min = torch.min(y_task_test.view(-1))
-    y_task_test += (torch.abs(y_task_test_min) + epsilon)
+    x_task_train = 2*(x_task_train-x_task_train_min)/(x_task_train_max-x_task_train_min) - 1
+    y_task_train = 2*(y_task_train-y_task_train_min)/(y_task_train_max-y_task_train_min) - 1
 
-    # Will be useful later for de-standardization
+    x_task_test = 2*(x_task_test-x_task_train_min)/(x_task_train_max-x_task_train_min) - 1
+    y_task_test = 2*(y_task_test-y_task_train_min)/(y_task_train_max-y_task_train_min) - 1
+
+    # Will be useful later for denormalization
     # This is used only when evaluating the optimal model
     if target_dir_name is not None:
-        save_standardization_settings(train_mean,
-                                    train_std,
-                                    epsilon,
-                                    torch.abs(y_task_test_min),
-                                    target_dir_name)
+        save_normalization_settings(y_task_train_min, y_task_train_max, target_dir_name)
 
     return x_task_train, y_task_train, x_task_test, y_task_test, y_task_test_raw
 
 
-def unstandardized_preds(y_pred, target_dir_name, loss):
+def denormalized_preds(y_pred, target_dir_name):
     """Transform standardized data back to original scale.
 
     The process includes doing the inverse transformations of the ones used during data
@@ -517,17 +486,12 @@ def unstandardized_preds(y_pred, target_dir_name, loss):
     settings_filepath = target_dir_name + 'settings.csv'
     settings = pd.read_csv(settings_filepath)
 
-    if loss == 'Gamma':
-        y_pred = torch.exp(y_pred)
+    y_min, y_max = settings['y_min'][0], settings['y_max'][0]
 
-    # Shift back to 0
-    y_pred_raw = y_pred - (settings['epsilon'][0] + settings['y_test_min'][0])
+    # De-normalize back to original scale
+    y_pred_raw = (y_pred+1)*(y_max-y_min)/2 + y_min
 
-    # De-standardize
-    y_pred_raw *= settings['train_std'][0]
-    y_pred_raw += settings['train_mean'][0]
-
-    return y_pred
+    return y_pred_raw
 
 
 def get_task_test_set(test_dataloader):
